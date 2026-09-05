@@ -15,15 +15,15 @@ public:
 	static void compute(const LocalCoordinates3D* localPointIt, const uint8_t nPoints, double* valueIt);
 	static void compute(const LocalCoordinates3D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
 
-	void computeOnFace0(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
-	void computeOnFace1(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
-	void computeOnFace2(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
-	void computeOnFace3(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
+	static void computeOnFace0(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
+	static void computeOnFace1(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
+	static void computeOnFace2(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
+	static void computeOnFace3(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt);
 
-	void computeOnFace0(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
-	void computeOnFace1(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
-	void computeOnFace2(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
-	void computeOnFace3(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
+	static void computeOnFace0(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
+	static void computeOnFace1(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
+	static void computeOnFace2(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
+	static void computeOnFace3(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, LocalCoordinates3D* gradientIt);
 	//static void compute(const LocalCoordinates* localPointIt, const size_t nPoints, double* gradientIt);
 };
 

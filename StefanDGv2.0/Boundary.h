@@ -5,6 +5,8 @@
 
 struct Boundary
 {
+	static const unsigned char PLANE_SURFACE = 16;
+
 	struct ImplicitCondition;
 	struct FunctionCondition;
 	struct ValueCondition;
@@ -85,5 +87,6 @@ struct Boundary
 	//unsigned int interfaceIndex;
 	const Condition* condition;
 	unsigned int regionsIndexes[2];
+	unsigned char type;
 };
 

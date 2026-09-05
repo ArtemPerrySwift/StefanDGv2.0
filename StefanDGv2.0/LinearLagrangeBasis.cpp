@@ -72,8 +72,30 @@ void LinearLagrangeBasis::compute(const LocalCoordinates3D* localPointIt, const 
 	}
 }
 
-// u = v, v = u, w = 0
+// u = r, v = u, w = v
 void LinearLagrangeBasis::computeOnFace0(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt)
+{
+	double* function1ValueIt = valueIt + nPoints;
+	double* function2ValueIt = function1ValueIt + nPoints;
+	double* function3ValueIt = function2ValueIt + nPoints;
+
+	for (uint8_t i = 0; i < nPoints; ++i)
+	{
+		*valueIt = 0.0;
+		++valueIt;
+		*function1ValueIt = 1.0 - localPointIt->v - localPointIt->v;
+		++function1ValueIt;
+		*function2ValueIt = localPointIt->u;
+		++function2ValueIt;
+		*function3ValueIt = localPointIt->v;
+		++function3ValueIt;
+
+		++localPointIt;
+	}
+}
+
+// u = 0, v = u, w = v
+void LinearLagrangeBasis::computeOnFace1(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt)
 {
 	double* function1ValueIt = valueIt + nPoints;
 	double* function2ValueIt = function1ValueIt + nPoints;
@@ -83,11 +105,11 @@ void LinearLagrangeBasis::computeOnFace0(const LocalCoordinates2D* localPointIt,
 	{
 		*valueIt = 1.0 - localPointIt->u - localPointIt->v;
 		++valueIt;
-		*function1ValueIt = localPointIt->v;
+		*function1ValueIt = 0.0;
 		++function1ValueIt;
 		*function2ValueIt = localPointIt->u;
 		++function2ValueIt;
-		*function3ValueIt = 0.0;
+		*function3ValueIt = localPointIt->v;
 		++function3ValueIt;
 
 		++localPointIt;
@@ -95,7 +117,7 @@ void LinearLagrangeBasis::computeOnFace0(const LocalCoordinates2D* localPointIt,
 }
 
 // u = u, v = 0, w = v
-void LinearLagrangeBasis::computeOnFace1(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt)
+void LinearLagrangeBasis::computeOnFace2(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt)
 {
 	double* function1ValueIt = valueIt + nPoints;
 	double* function2ValueIt = function1ValueIt + nPoints;
@@ -116,8 +138,8 @@ void LinearLagrangeBasis::computeOnFace1(const LocalCoordinates2D* localPointIt,
 	}
 }
 
-// u = 0, v = v, w = u
-void LinearLagrangeBasis::computeOnFace2(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt)
+// u = u, v = v, w = 0
+void LinearLagrangeBasis::computeOnFace3(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt)
 {
 	double* function1ValueIt = valueIt + nPoints;
 	double* function2ValueIt = function1ValueIt + nPoints;
@@ -127,33 +149,11 @@ void LinearLagrangeBasis::computeOnFace2(const LocalCoordinates2D* localPointIt,
 	{
 		*valueIt = 1.0 - localPointIt->u - localPointIt->v;
 		++valueIt;
-		*function1ValueIt = 0.0;
-		++function1ValueIt;
-		*function2ValueIt = localPointIt->v;
-		++function2ValueIt;
-		*function3ValueIt = localPointIt->u;
-		++function3ValueIt;
-
-		++localPointIt;
-	}
-}
-
-// u = u, v = v, w = 1.0 - u - v
-void LinearLagrangeBasis::computeOnFace3(const LocalCoordinates2D* localPointIt, const uint8_t nPoints, double* valueIt)
-{
-	double* function1ValueIt = valueIt + nPoints;
-	double* function2ValueIt = function1ValueIt + nPoints;
-	double* function3ValueIt = function2ValueIt + nPoints;
-
-	for (uint8_t i = 0; i < nPoints; ++i)
-	{
-		*valueIt = 0.0;
-		++valueIt;
 		*function1ValueIt = localPointIt->u;
 		++function1ValueIt;
 		*function2ValueIt = localPointIt->v;
 		++function2ValueIt;
-		*function3ValueIt = 1.0 - localPointIt->u - localPointIt->v;
+		*function3ValueIt = 0.0;
 		++function3ValueIt;
 
 		++localPointIt;

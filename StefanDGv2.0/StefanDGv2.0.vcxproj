@@ -131,24 +131,35 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Boundary.cpp" />
+    <ClCompile Include="CoordinatesFunctions.cpp" />
     <ClCompile Include="DG.cpp" />
+    <ClCompile Include="ElementLAC.cpp" />
+    <ClCompile Include="FaceDGCalculator.cpp" />
     <ClCompile Include="LinearLagrangeBasis.cpp" />
+    <ClCompile Include="LLt.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Model.cpp" />
+    <ClCompile Include="NumericalIntegration.cpp" />
     <ClCompile Include="TimeMesh.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ArrayFunctions.h" />
     <ClInclude Include="Bases.h" />
     <ClInclude Include="Boundary.h" />
     <ClInclude Include="Coordinates.h" />
+    <ClInclude Include="CoordinatesFunctions.h" />
     <ClInclude Include="DG.h" />
+    <ClInclude Include="ElementLAC.h" />
+    <ClInclude Include="FaceDGCalculator.h" />
     <ClInclude Include="GeometryConstants.h" />
     <ClInclude Include="LinearLagrangeBasis.h" />
+    <ClInclude Include="LLt.h" />
     <ClInclude Include="LocalCoordinates2D.h" />
     <ClInclude Include="LocalCoordinates3D.h" />
     <ClInclude Include="MaterialPhase.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="NonconformInterface.h" />
+    <ClInclude Include="NumericalIntegration.h" />
     <ClInclude Include="Region.h" />
     <ClInclude Include="Interface.h" />
     <ClInclude Include="TimeMesh.h" />

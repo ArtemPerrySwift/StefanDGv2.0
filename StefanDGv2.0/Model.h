@@ -10,6 +10,7 @@
 struct Model
 {
 public:
+	enum class Error : uint8_t {NO_ERRORS, E_BOUNDARIES, E_CONDITIONS, E_MATERIAL_PHASES, E_REGIONS};
 	Boundary::ValueCondition* valueConditions;
 	Boundary::ConformCondition* conformConditions;
 	Boundary* boundaries;
@@ -20,8 +21,9 @@ public:
 
 	unsigned int nRegions;
 	unsigned int nBoundaries;
+	unsigned int nNonconformInterfaces;
 	
-	bool initilizeByCurrentGMSHModel();
+	Error initilizeByCurrentGMSHModel();
 	void clear();
 };
 

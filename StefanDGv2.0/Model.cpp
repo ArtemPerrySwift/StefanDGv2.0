@@ -422,6 +422,7 @@ bool initilizeBoundaries(const int orderedSurfacesPGsTags[],
                           unsigned int* surfacesPGsStartIndexIt,
                           int* surfacesPGTagIt,
                           const unsigned int nSurfaces,
+                          const unsigned char* surfaceTypeIt,
                           Boundary* boundaryIt)
 {
     
@@ -446,10 +447,13 @@ bool initilizeBoundaries(const int orderedSurfacesPGsTags[],
             ++surfacesPGTagIt;
         }
 
+        boundaryIt->type = *surfaceTypeIt;
+
         boundaryIt->regionsIndexes[0] = UINT_MAX;
         boundaryIt->regionsIndexes[1] = UINT_MAX;
 
         ++surfacesPGsStartIndexIt;
+        ++surfaceTypeIt;
         ++boundaryIt;
     }
 
@@ -617,7 +621,7 @@ unsigned int processBoundariesFinal(const int surfacesTags[],
     return iConformCondition;
 }
 
-bool Model::initilizeByCurrentGMSHModel()
+Model::Error Model::initilizeByCurrentGMSHModel()
 {
     unsigned int nRegions = gmsh::model::regions::getCount();
     unsigned int nSurfaces = gmsh::model::surfaces::getCount();
@@ -686,14 +690,15 @@ bool Model::initilizeByCurrentGMSHModel()
         free(PGsNames);
         free(valueConditions);
         free(conditions);
+        free(surfacesTypes);
 
-        return true;
+        return Error::E_CONDITIONS;
     }
 
     realloc(valueConditions, nValueConditions * sizeof(Boundary::ValueCondition));
     this->valueConditions = valueConditions;
 
-    err = initilizeBoundaries(PGsTags + dimensionsPGsStartIndexes[2], nSurfacesPGs, conditions, surfacesPGsStartIndexes, surfacesPGs, nSurfaces, boundaries);
+    err = initilizeBoundaries(PGsTags + dimensionsPGsStartIndexes[2], nSurfacesPGs, conditions, surfacesPGsStartIndexes, surfacesPGs, nSurfaces, surfacesTypes, boundaries);
 
     if (err)
     {
@@ -707,8 +712,9 @@ bool Model::initilizeByCurrentGMSHModel()
         free(PGsNames);
         free(valueConditions);
         free(conditions);
+        free(surfacesTypes);
 
-        return true;
+        return Error::E_BOUNDARIES;
     }
 
     unsigned int nRegionsPGs = dimensionsPGsStartIndexes[4] - dimensionsPGsStartIndexes[3];
@@ -729,8 +735,9 @@ bool Model::initilizeByCurrentGMSHModel()
         free(valueConditions);
         free(conditions);
         free(materialPhases);
+        free(surfacesTypes);
 
-        return true;
+        return Error::E_MATERIAL_PHASES;
     }
 
     this->materialPhases = materialPhases;
@@ -762,8 +769,9 @@ bool Model::initilizeByCurrentGMSHModel()
         free(valueConditions);
         free(conditions);
         free(materialPhases);
+        free(surfacesTypes);
 
-        return true;
+        return Error::E_REGIONS;
     }
 
     this->regionsMaterialPhases = regionsMaterialPhases;
@@ -786,6 +794,7 @@ bool Model::initilizeByCurrentGMSHModel()
 
     realloc(conformConditions, nConformConditions * sizeof(Boundary::ConformCondition));
 
+    this->nNonconformInterfaces = nNonconformInterfaces;
     this->nonconformInterfaces = noncofnormInterfaces;
     this->conformConditions = conformConditions;
 
@@ -795,6 +804,17 @@ bool Model::initilizeByCurrentGMSHModel()
     free(surfacesPGs);
     free(PGsMemoryPull);
     free(conditions);
+    free(surfacesTypes);
 
-    return false;
+    return Error::NO_ERRORS;
+}
+
+void Model::clear()
+{
+    free(valueConditions);
+    free(conformConditions);
+    free(boundaries);
+    free(nonconformInterfaces);
+    free(materialPhases);
+    free(regionsMaterialPhases);
 }

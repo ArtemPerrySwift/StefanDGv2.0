@@ -13,12 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="DG">
+      <UniqueIdentifier>{513626df-0a58-431a-ab36-75ae6b6a7dd6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
-      <Filter>Исходные файлы</Filter>
-    </ClCompile>
-    <ClCompile Include="DG.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="LinearLagrangeBasis.cpp">
@@ -33,11 +33,26 @@
     <ClCompile Include="Boundary.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="LLt.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="NumericalIntegration.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ElementLAC.cpp">
+      <Filter>DG</Filter>
+    </ClCompile>
+    <ClCompile Include="DG.cpp">
+      <Filter>DG</Filter>
+    </ClCompile>
+    <ClCompile Include="CoordinatesFunctions.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="FaceDGCalculator.cpp">
+      <Filter>DG</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DG.h">
-      <Filter>Файлы заголовков</Filter>
-    </ClInclude>
     <ClInclude Include="LocalCoordinates2D.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
@@ -75,6 +90,27 @@
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="NonconformInterface.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="LLt.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="NumericalIntegration.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="DG.h">
+      <Filter>DG</Filter>
+    </ClInclude>
+    <ClInclude Include="ElementLAC.h">
+      <Filter>DG</Filter>
+    </ClInclude>
+    <ClInclude Include="CoordinatesFunctions.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="FaceDGCalculator.h">
+      <Filter>DG</Filter>
+    </ClInclude>
+    <ClInclude Include="ArrayFunctions.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>
