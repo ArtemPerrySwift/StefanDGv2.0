@@ -10,63 +10,102 @@ namespace DG
 
 	namespace StefanTask
 	{
+		void initSolver();
+
 		void solve(const unsigned int nRegions,
-			const MaterialPhase* const regionsMaterialPhases[],
-			const Boundary boundaries[],
-			const unsigned int nBoundaries,
-			const NonconformInterface nonconformInterfaces[],
-			const unsigned int nNonconformInterfaces,
-			const double tMin,
-			const double tMax,
-			const size_t nTSteps,
-			Solution* solutionIt);
+			       const MaterialPhase* const regionsMaterialPhases[],
+			       const Boundary boundaries[],
+			       const unsigned int nBoundaries,
+			       const NonconformInterface nonconformInterfaces[],
+			       const unsigned int nNonconformInterfaces,
+			       const double tMin,
+			       const double tMax,
+			       const size_t nTSteps,
+			       Solution* solutionIt);
 
 		void solveInitialIteration(const unsigned int nRegions,
-			const MaterialPhase* const regionsMaterialPhases[],
-			const Boundary boundaries[],
-			const unsigned int nBoundaries,
-			const NonconformInterface nonconformInterfaces[],
-			const unsigned int nNonconformInterfaces,
-			const double dt,
-			const double penalty,
-			void* calculationBuffer,
-			void* additionalBuffer,
-			Solution* solutionIt);
+								   const MaterialPhase* const regionsMaterialPhases[],
+								   const Boundary boundaries[],
+								   const unsigned int nBoundaries,
+								   const NonconformInterface nonconformInterfaces[],
+								   const unsigned int nNonconformInterfaces,
+								   const double dt,
+								   const double penalty,
+								   void* calculationBuffer,
+								   void* additionalBuffer,
+								   Solution* solutionIt);
 
+		void solveIteration(const unsigned int nRegions,
+						    const MaterialPhase* const regionsMaterialPhases[],
+						    const Boundary boundaries[],
+						    const unsigned int nBoundaries,
+						    const NonconformInterface nonconformInterfaces[],
+						    const unsigned int nNonconformInterfaces,
+						    const double dt,
+						    const double penalty,
+						    const Solution& solution,
+						    void* calculationBuffer,
+						    void* additionalBuffer,
+						    Solution* solutionIt);
+
+		void relocateInitialFrontNodes(MaterialPhase solidMaterialsPhase,
+									   MaterialPhase liquidMaterialsPhase,
+									   const double dt,
+									   const double latentHeat,
+									   const Coordinates* normalIt,
+									   const unsigned int nFrontNodes,
+									   Coordinates* frontNodesIt);
+
+		void relocateFrontNodes(const Solution& solution,
+								int solidRegionTag,
+								int liquidRegionTag,
+								MaterialPhase solidMaterialsPhase,
+								MaterialPhase liquidMaterialsPhase,
+								const double dt,
+								const double latentHeat,
+								const Coordinates* normalIt,
+								const unsigned int nFrontNodes,
+								Coordinates* frontNodesIt);
+
+		void getFrontNodes(const int frontTag, int** frontNodesTags,unsigned int* nFrontNodes);
 	}
 
 
 	class Solution
 	{
 	public:
-		friend 	void solveStefanTask(const unsigned int nRegions,
-			const MaterialPhase* const regionsMaterialPhases[],
-			const Boundary boundaries[],
-			const unsigned int nBoundaries,
-			const NonconformInterface nonconformInterfaces[],
-			const unsigned int nNonconformInterfaces,
-			const double tMin,
-			const double tMax,
-			const size_t nTSteps,
-			Solution* solutionIt);
-
 		friend void StefanTask::solveInitialIteration(const unsigned int nRegions,
-			const MaterialPhase* const regionsMaterialPhases[],
-			const Boundary boundaries[],
-			const unsigned int nBoundaries,
-			const NonconformInterface nonconformInterfaces[],
-			const unsigned int nNonconformInterfaces,
-			const double dt,
-			const double penalty,
-			void* calculationBuffer,
-			void* additionalBuffer,
-			Solution* solutionIt);
+													  const MaterialPhase* const regionsMaterialPhases[],
+													  const Boundary boundaries[],
+													  const unsigned int nBoundaries,
+													  const NonconformInterface nonconformInterfaces[],
+													  const unsigned int nNonconformInterfaces,
+													  const double dt,
+													  const double penalty,
+													  void* calculationBuffer,
+													  void* additionalBuffer,
+													  Solution* solutionIt);
+
+		friend void StefanTask::solveIteration(const unsigned int nRegions,
+											   const MaterialPhase* const regionsMaterialPhases[],
+											   const Boundary boundaries[],
+											   const unsigned int nBoundaries,
+											   const NonconformInterface nonconformInterfaces[],
+											   const unsigned int nNonconformInterfaces,
+											   const double dt,
+											   const double penalty,
+											   const Solution& solution,
+											   void* calculationBuffer,
+											   void* additionalBuffer,
+											   Solution* solutionIt);
 
 		double compute(const size_t elementTag, const LocalCoordinates3D LocalPoint3D) const;
 		void compute(const size_t elementTag, const LocalCoordinates3D LocalPoint3D, LocalCoordinates3D& gradient) const;
+		void clear();
+		const double* getDOFs() const;
 
-	private:
 		Solution() = default;
+	private:
 		Eigen::VectorXd _DOFs;
 		double* _DOFsPtr;
 	};

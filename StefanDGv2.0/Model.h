@@ -19,6 +19,9 @@ public:
 	MaterialPhase* materialPhases;
 	const MaterialPhase** regionsMaterialPhases;
 
+	int *regionsTags;
+	int frontTag;
+
 	unsigned int nRegions;
 	unsigned int nBoundaries;
 	unsigned int nNonconformInterfaces;

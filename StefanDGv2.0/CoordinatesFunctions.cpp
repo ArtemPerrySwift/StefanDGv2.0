@@ -89,6 +89,14 @@ namespace CoordinatesFunctions
 
     }
 
+    void translatePointCoordinatesToLocal(const Coordinates& basePoint, const Coordinates &point, const double transitionMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], LocalCoordinates3D& localCoordinates)
+    {
+        Coordinates pointsDiff = { point.x - basePoint.x, point.y - basePoint.y, point.z - basePoint.z };
+        localCoordinates.u = transitionMatrix[0] * pointsDiff.x + transitionMatrix[1] * pointsDiff.y + transitionMatrix[2] * pointsDiff.z;
+        localCoordinates.v = transitionMatrix[3] * pointsDiff.x + transitionMatrix[4] * pointsDiff.y + transitionMatrix[5] * pointsDiff.z;
+        localCoordinates.w = transitionMatrix[6] * pointsDiff.x + transitionMatrix[7] * pointsDiff.y + transitionMatrix[8] * pointsDiff.z;
+    }
+
     void translatePointsCoordinatesToLocal2DExcludeX(const Coordinates& basePoint,
                                                      const Coordinates points[], 
                                                      const size_t pointsIndexes[constants::triangle::N_NODES],

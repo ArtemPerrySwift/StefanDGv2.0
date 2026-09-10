@@ -12,6 +12,11 @@ namespace CoordinatesFunctions
 	void computeTransitionMatrix2DExcludeY(const Coordinates nodes[], const size_t* triangleNodeIndexIt, double transitionMatrix[4]);
 	void computeTransitionMatrix2DExcludeZ(const Coordinates nodes[], const size_t* triangleNodeIndexIt, double transitionMatrix[4]);
 
+	void translatePointCoordinatesToLocal(const Coordinates &basePoint,
+									      const Coordinates &point,
+										  const double transitionMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+										  LocalCoordinates3D &localCoordinates);
+
 	void translatePointsCoordinatesToLocal2DExcludeX(const Coordinates& basePoint,
 												     const Coordinates points[],
 												     const size_t pointsIndexes[constants::triangle::N_NODES],

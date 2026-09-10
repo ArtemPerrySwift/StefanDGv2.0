@@ -547,7 +547,8 @@ unsigned int processBoundariesFinal(const int surfacesTags[],
                                     const MaterialPhase* const regionsMaterialPhases[],
                                     Boundary* boundaryIt,
                                     Boundary::ConformCondition* conformConditionMemoryIt,
-                                    NonconformInterface nonconfromInterfaces[])
+                                    NonconformInterface nonconfromInterfaces[],
+                                    int* frontTag)
 {
     void* memoryBuffer = malloc(nNonconformInterfaces * (sizeof(int) + sizeof(bool)));
     int* nonconformConditionPGTags = (int*)memoryBuffer;
@@ -612,7 +613,10 @@ unsigned int processBoundariesFinal(const int surfacesTags[],
                nonconformConditionPGTagIsMet[tagIndex] = true;
             }
         }
-
+        else if (boundaryIt->condition->macroType == Boundary::Condition::MacroType::STEFAN_V)
+        {
+            *frontTag = surfacesTags[i];
+        }
         ++boundaryIt;
     }
 
@@ -631,13 +635,14 @@ Model::Error Model::initilizeByCurrentGMSHModel()
 
     Boundary* boundaries = (Boundary*)malloc(nSurfaces * sizeof(Boundary));
     const MaterialPhase** regionsMaterialPhases = (const MaterialPhase**)malloc(nRegions * sizeof(MaterialPhase*));
+    int* regionsTags = (int*)malloc(nRegions * sizeof(int));
 
     this->boundaries = boundaries;
     this->regionsMaterialPhases = regionsMaterialPhases;
+    this->regionsTags = regionsTags;
 
-    void* regionsMemoryPull = malloc(((nRegions + 1) << 1 + nRegions) * sizeof(int));
-    int* regionsTags = (int*)regionsMemoryPull;
-    unsigned int* regionsBoundariesStartIndexes = (unsigned int*)(regionsTags + nRegions);
+    void* regionsMemoryPull = malloc(((nRegions + 1) << 1) * sizeof(int));
+    unsigned int* regionsBoundariesStartIndexes = (unsigned int*)(regionsMemoryPull);
     unsigned int* regionsPGsStartIndexes = regionsBoundariesStartIndexes + nRegions + 1;
 
     gmsh::model::regions::getStartIndexes(regionsBoundariesStartIndexes, regionsPGsStartIndexes);
@@ -680,6 +685,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
 
     if (err)
     {
+        free(regionsTags);
         free(boundaries);
         free(regionsMaterialPhases);
         free(regionsMemoryPull);
@@ -702,6 +708,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
 
     if (err)
     {
+        free(regionsTags);
         free(boundaries);
         free(regionsMaterialPhases);
         free(regionsMemoryPull);
@@ -724,6 +731,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
 
     if (err)
     {
+        free(regionsTags);
         free(boundaries);
         free(regionsMaterialPhases);
         free(regionsMemoryPull);
@@ -759,6 +767,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
 
     if (err)
     {
+        free(regionsTags);
         free(boundaries);
         free(regionsMaterialPhases);
         free(regionsMemoryPull);
@@ -790,7 +799,8 @@ Model::Error Model::initilizeByCurrentGMSHModel()
                                                              regionsMaterialPhases,
                                                              boundaries,
                                                              conformConditions,
-                                                             noncofnormInterfaces);
+                                                             noncofnormInterfaces,
+                                                             &(this->frontTag));
 
     realloc(conformConditions, nConformConditions * sizeof(Boundary::ConformCondition));
 
@@ -817,4 +827,5 @@ void Model::clear()
     free(nonconformInterfaces);
     free(materialPhases);
     free(regionsMaterialPhases);
+    free(regionsTags);
 }
