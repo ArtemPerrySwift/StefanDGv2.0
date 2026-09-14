@@ -118,5 +118,11 @@
     <Text Include="TimeMesh.txt">
       <Filter>Файлы ресурсов</Filter>
     </Text>
+    <Text Include="LatentHeat.txt">
+      <Filter>Файлы ресурсов</Filter>
+    </Text>
+    <Text Include="Penalty.txt">
+      <Filter>Файлы ресурсов</Filter>
+    </Text>
   </ItemGroup>
 </Project>

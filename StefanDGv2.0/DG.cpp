@@ -10,7 +10,7 @@
 #include "ArrayFunctions.h"
 #include <Eigen/IterativeLinearSolvers>
 #include <gmsh.h>
-#include <set>;
+#include <set>
 
 namespace DG
 {
@@ -26,13 +26,13 @@ namespace DG
         template<>
         inline static double initialCondition<MaterialPhase::SOLID>(const Coordinates& point)
         {
-            return 0.0;
+            return 273.15 - point.x * 2;
         }
 
         template<>
         inline static double initialCondition<MaterialPhase::LIQUID>(const Coordinates& point)
         {
-            return 0.0;
+            return 293.15 - (point.x + 1)*20;
         }
 
         template<MaterialPhase::State>
@@ -44,13 +44,13 @@ namespace DG
         template<>
         inline static void initialConditionGradient<MaterialPhase::SOLID>(const Coordinates& point, Coordinates& gradient)
         {
-            gradient = { 0, 0, 0 };
+            gradient = { -2, 0, 0 };
         }
 
         template<>
         inline static void initialConditionGradient<MaterialPhase::LIQUID>(const Coordinates& point, Coordinates& gradient)
         {
-            gradient = { 0, 0, 0 };
+            gradient = { -20, 0, 0 };
         }
 
 
@@ -122,6 +122,55 @@ namespace DG
                 ++initlialConditionValueIt;
                 ++localPointIt;
             }
+        }
+
+        double* computeInitialDOFs(const unsigned int nRegions, const MaterialPhase* const regionsMaterialPhases[], size_t* regionsStartTetrahedronsIndexes)
+        {
+            gmsh::model::mesh::getRegionsTetrahedronsStartIndexes(regionsStartTetrahedronsIndexes);
+            size_t nNodes = gmsh::model::mesh::getNodesCount();
+
+            size_t nTetNodes = 4 * regionsStartTetrahedronsIndexes[nRegions];
+            double* DOFs = (double*)malloc(nTetNodes * sizeof(double));
+
+            void* memoryBufffer = malloc(nTetNodes * sizeof(size_t) + (nNodes + 1) * sizeof(Coordinates));
+            size_t* tetNodesTags = (size_t*)memoryBufffer;
+            gmsh::model::mesh::getTetrahedrons(tetNodesTags);
+
+            Coordinates* nodes = (Coordinates*)(tetNodesTags + nTetNodes);
+            gmsh::model::mesh::getNodes((double(*)[3])nodes);
+
+            size_t* tetNodesTagIt = tetNodesTags;
+            double* DOFIt = DOFs;
+            size_t iTet = *regionsStartTetrahedronsIndexes * constants::tetrahedron::N_NODES;
+            size_t regionEndTetNodeIndex;
+            for (unsigned int i = 0; i < nRegions; ++i)
+            {
+                ++regionsStartTetrahedronsIndexes;
+                regionEndTetNodeIndex = *regionsStartTetrahedronsIndexes * constants::tetrahedron::N_NODES;
+                if ((*regionsMaterialPhases)->state == MaterialPhase::SOLID)
+                {
+                    for (; iTet < regionEndTetNodeIndex; ++iTet)
+                    {
+                        *DOFIt = initialCondition<MaterialPhase::SOLID>(nodes[*tetNodesTagIt]);
+                        ++DOFIt;
+                        ++tetNodesTagIt;
+                    }
+
+                }
+                else
+                {
+                    for (; iTet < regionEndTetNodeIndex; ++iTet)
+                    {
+                        *DOFIt = initialCondition<MaterialPhase::LIQUID>(nodes[*tetNodesTagIt]);
+                        ++DOFIt;
+                        ++tetNodesTagIt;
+                    }
+                }
+                ++regionsMaterialPhases;
+            }
+
+            free(memoryBufffer);
+            return DOFs;
         }
 
         template<size_t N_FUNCTIONS>
@@ -473,9 +522,6 @@ namespace DG
                                                double normalDerivatives[FaceLAC<Basis>::N_BASIS_VALUES],
                                                double bilinearAdjusments[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])
         {
-
-            Coordinates* gradients = (Coordinates*)(normalDerivatives + NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::nSteps);
-
             double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(transpMatrixies_[iTriangle], determinant)*/;
 
             CoordinatesFunctions::translate(localJacobianMatrix, FaceLAC<Basis>::getLocalGradientsByFace()[localIndex], FaceLAC<Basis>::N_BASIS_VALUES, gradients);
@@ -486,6 +532,44 @@ namespace DG
             addInteriorFaceAdjusmets<Basis::N_FUNCTIONS>(flowMatrix, FaceLAC<Basis>::getMassMatrixies()[localIndex], facePenalty, commonMultiplier, bilinearAdjusments);
         }
 
+        static void extractFaceNodesTags(const uint8_t localIndex,
+                                         const size_t tetrahedronNodes[constants::tetrahedron::N_NODES],
+                                         size_t faceNodes[constants::triangle::N_NODES])
+        {
+            switch (localIndex)
+            {
+            case 0:
+            {
+                faceNodes[0] = tetrahedronNodes[0];
+                faceNodes[1] = tetrahedronNodes[2];
+                faceNodes[2] = tetrahedronNodes[1];
+                break;
+            }
+            case 1:
+            {
+                faceNodes[0] = tetrahedronNodes[0];
+                faceNodes[1] = tetrahedronNodes[1];
+                faceNodes[2] = tetrahedronNodes[3];
+                break;
+            }
+            case 2:
+            {
+                faceNodes[0] = tetrahedronNodes[0];
+                faceNodes[1] = tetrahedronNodes[3];
+                faceNodes[2] = tetrahedronNodes[2];
+                break;
+            }
+            case 3:
+            {
+                faceNodes[0] = tetrahedronNodes[3];
+                faceNodes[1] = tetrahedronNodes[1];
+                faceNodes[2] = tetrahedronNodes[2];
+                break;
+            }
+            }
+        }
+
+        /*
         static void computeOutwardNormal(const Coordinates nodes[], const size_t tetrahedronNodesTags[constants::tetrahedron::N_NODES], const uint8_t faceLocalIndex, Coordinates& outwardNormal)
         {
             Coordinates sideVector;
@@ -527,6 +611,7 @@ namespace DG
                 outwardNormal.z = -outwardNormal.z;
             }
         }
+        */
 
         uint8_t computeChangingIndexes(const size_t original[constants::triangle::N_NODES], const size_t comparison[constants::triangle::N_NODES])
         {
@@ -604,6 +689,8 @@ namespace DG
             Coordinates* gradients = (Coordinates*)(normalDerivatives + FaceLAC<Basis>::N_BASIS_VALUES);
             Coordinates normal;
 
+            size_t facesNodes[2][constants::triangle::N_NODES];
+
             for (size_t faceIndex = 0; faceIndex < nInteriorFaces; ++faceIndex)
             {
                 double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(*transpMatrixiesIt, determinant); ++transpMatrixiesIt*/;
@@ -612,7 +699,8 @@ namespace DG
                 uint8_t localIndex0 = *faceIndexesSide1It && 3;
                 ++faceIndexesSide1It;
 
-                computeOutwardNormal(nodes, tetrahedronsNodesTags[elementIndex], localIndex0, normal);
+                extractFaceNodesTags(localIndex0, tetrahedronsNodesTags[elementIndex], facesNodes[0]);
+                CoordinatesFunctions::computeNormal(nodes, facesNodes[0], normal);
                 
                 double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
@@ -636,6 +724,13 @@ namespace DG
                 uint8_t localIndex1 = *faceIndexesSide2It && 3;
                 ++faceIndexesSide2It;
 
+                extractFaceNodesTags(localIndex0, tetrahedronsNodesTags[elementIndex], facesNodes[1]);
+                uint8_t changingIndexes = computeChangingIndexes(facesNodes[1], facesNodes[0]);
+                if (changingIndexes != 0)
+                {
+                    NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(normalDerivatives, Basis::N_FUNCTIONS, changingIndexes);
+                }
+
                 FaceLAC<Basis>::computeFlowMatrix(localIndex1, normalDerivatives, crossFlowMatrix1);
 
                 normal.x = -normal.x;
@@ -652,6 +747,12 @@ namespace DG
                                           normalDerivatives,
                                           bilinearTetrahedronsAdjusmentsSide2[elementIndex]);
 
+                changingIndexes = computeChangingIndexes(facesNodes[0], facesNodes[1]);
+                if (changingIndexes != 0)
+                {
+                    NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(normalDerivatives, Basis::N_FUNCTIONS, changingIndexes);
+                }
+
                 FaceLAC<Basis>::computeFlowMatrix(localIndex0, normalDerivatives, crossFlowMatrix2);
 
                 computeInteriorFaceCrossAdjusmets<Basis::N_FUNCTIONS>(crossFlowMatrix2,
@@ -665,7 +766,7 @@ namespace DG
             }
         }
 
-
+        /*
         static double computeFaceDeterminant(const uint8_t localIndex,
                                              const Coordinates nodes[],
                                              const size_t tetrahedronNodesTags[constants::tetrahedron::N_NODES])
@@ -699,6 +800,7 @@ namespace DG
             CoordinatesFunctions::computeNormal(transpJacobian, normal);
             return sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);;
         }
+        */
 
         static void processFacesOnPlaneInterface(const size_t* faceIndexesSide1It,
                                                  const size_t* faceIndexesSide2It,
@@ -730,15 +832,17 @@ namespace DG
 
             Coordinates* gradients = (Coordinates*)(normalDerivatives + FaceLAC<Basis>::N_BASIS_VALUES);
 
-            Coordinates unitNormal;
-            Coordinates reverseUnitNormal;
+            size_t facesNodes[2][constants::triangle::N_NODES];
+            Coordinates normal, unitNormal, reverseUnitNormal;
 
-            computeOutwardNormal(nodes, tetrahedronsNodesTags[*faceIndexesSide1It >> 2], *faceIndexesSide1It && 3, unitNormal);
-            double det = sqrt(unitNormal.x * unitNormal.x + unitNormal.y * unitNormal.y + unitNormal.z * unitNormal.z);
+            extractFaceNodesTags(*faceIndexesSide1It && 3, tetrahedronsNodesTags[*faceIndexesSide1It >> 2], facesNodes[0]);
+            CoordinatesFunctions::computeNormal(nodes, facesNodes[0], normal);
 
-            unitNormal.x /= det;
-            unitNormal.y /= det;
-            unitNormal.z /= det;
+            double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+
+            unitNormal.x = normal.x / det;
+            unitNormal.y = normal.x / det;
+            unitNormal.z = normal.x / det;
 
             reverseUnitNormal.x = -unitNormal.x;
             reverseUnitNormal.y = -unitNormal.y;
@@ -752,7 +856,9 @@ namespace DG
                 uint8_t localIndex0 = *faceIndexesSide1It && 3;
                 ++faceIndexesSide1It;
 
-                det = computeFaceDeterminant(localIndex0, nodes, tetrahedronsNodesTags[elementIndex]);
+                extractFaceNodesTags(localIndex0, tetrahedronsNodesTags[elementIndex], facesNodes[0]);
+                CoordinatesFunctions::computeNormal(nodes, facesNodes[0], normal);
+                det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
                 double commonMultiplier = det * lambda;
 
@@ -770,6 +876,14 @@ namespace DG
                 uint8_t localIndex1 = *faceIndexesSide2It && 3;
                 ++faceIndexesSide2It;
 
+                extractFaceNodesTags(localIndex1, tetrahedronsNodesTags[elementIndex], facesNodes[1]);
+                uint8_t changingIndexes = computeChangingIndexes(facesNodes[1], facesNodes[0]);
+                if (changingIndexes != 0)
+                {
+                    NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(normalDerivatives, Basis::N_FUNCTIONS, changingIndexes);
+                }
+
+
                 FaceLAC<Basis>::computeFlowMatrix(localIndex1, normalDerivatives, crossFlowMatrix1);
 
                 addInteriorFaceAdjusments(localIndex1,
@@ -781,6 +895,12 @@ namespace DG
                     flowMatrix,
                     normalDerivatives,
                     bilinearTetrahedronsAdjusmentsSide2[elementIndex]);
+
+                changingIndexes = computeChangingIndexes(facesNodes[0], facesNodes[1]);
+                if (changingIndexes != 0)
+                {
+                    NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(normalDerivatives, Basis::N_FUNCTIONS, changingIndexes);
+                }
 
                 FaceLAC<Basis>::computeFlowMatrix(localIndex0, normalDerivatives, crossFlowMatrix2);
 
@@ -795,6 +915,7 @@ namespace DG
             }
         }
 
+        /*
         void extractFaceNodesTags(const uint8_t faceIndex, const size_t tetrahedronNodesTags[constants::tetrahedron::N_NODES], size_t faceNodes[constants::triangle::N_NODES])
         {
             switch (faceIndex)
@@ -829,6 +950,7 @@ namespace DG
             }
             }
         }
+        */
 
         static void addInteriorFaceFragmentAdjusments(const double commonMultiplier,
                                                       const double penalty,
@@ -842,9 +964,6 @@ namespace DG
                                                       double normalDerivatives[FaceLAC<Basis>::N_BASIS_VALUES],
                                                       double bilinearAdjusments[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])
         {
-
-            Coordinates* gradients = (Coordinates*)(normalDerivatives + NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::nSteps);
-
             double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(transpMatrixies_[iTriangle], determinant)*/;
 
             CoordinatesFunctions::translate(localJacobianMatrix, localGradients, FaceLAC<Basis>::N_BASIS_VALUES, gradients);
@@ -910,9 +1029,16 @@ namespace DG
             uint8_t localIndexes[2];
             Coordinates facesBasePoints[2];
 
-            double* sidesBilinearAdjusments[2];
             size_t faceIndex = faceIndexesSide1[*fragmentFaceSurfaceIndexSide1It];
-            computeOutwardNormal(nodes, tetrahedronsNodesTags[faceIndex >> 2], faceIndex && 3, unitNormals[0]);
+            extractFaceNodesTags(faceIndex && 3, tetrahedronsNodesTags[faceIndex >> 2], faceNodes[0]);
+            CoordinatesFunctions::computeNormal(nodes, faceNodes[0], unitNormals[0]);
+
+            double det = (unitNormals->x + unitNormals->x + unitNormals->y + unitNormals->y + unitNormals->y + unitNormals->y);
+
+            unitNormals->x /= det;
+            unitNormals->y /= det;
+            unitNormals->z /= det;
+
             unitNormals[1].x = -unitNormals[0].x;
             unitNormals[1].y = -unitNormals[0].y;
             unitNormals[1].z = -unitNormals[0].z;
@@ -1260,65 +1386,20 @@ namespace DG
             }
         }
 
-        static double computeFaceConditionData(const uint8_t localIndex,
-                                               const Coordinates nodes[],
-                                               const size_t tetrahedronNodesTags[constants::tetrahedron::N_NODES],
+
+        static double computeFaceConditionData(const Coordinates nodes[],
+                                               const size_t triangleNodesTags[constants::triangle::N_NODES],
                                                double dirichletValues[],
                                                Coordinates &unitNormal)
         {
-            Coordinates sideVector;
             double transpJacobian[LocalCoordinates2D::COUNT * Coordinates::COUNT];
-            switch (localIndex)
-            {
-            case 0:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo0Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[0]], nodes[tetrahedronNodesTags[1]], sideVector);
-                computeBoundaryCodnition<Boundary::FunctionCondition::Type::DIRICHLET>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[1]],
-                    dirichletValues);
-                break;
-            }
-            case 1:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo1Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[1]], nodes[tetrahedronNodesTags[2]], sideVector);
-                computeBoundaryCodnition<Boundary::FunctionCondition::Type::DIRICHLET>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[0]],
-                    dirichletValues);
-                break;
-            }
-            case 2:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo2Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[2]], nodes[tetrahedronNodesTags[3]], sideVector);
-                computeBoundaryCodnition<Boundary::FunctionCondition::Type::DIRICHLET>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[0]],
-                    dirichletValues);
-                break;
-            }
-            case 3:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo3Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[3]], nodes[tetrahedronNodesTags[0]], sideVector);
-                computeBoundaryCodnition<Boundary::FunctionCondition::Type::DIRICHLET>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[0]],
-                    dirichletValues);
-                break;
-            }
-            }
+            CoordinatesFunctions::computeTranspJacobianToFace(nodes, triangleNodesTags, transpJacobian);
+            computeBoundaryCodnition<Boundary::FunctionCondition::Type::DIRICHLET>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
+                transpJacobian,
+                nodes[triangleNodesTags[0]],
+                dirichletValues);
 
             CoordinatesFunctions::computeNormal(transpJacobian, unitNormal);
-            if ((unitNormal.x * sideVector.x + unitNormal.y * sideVector.y + unitNormal.z * sideVector.z) < 0.0)
-            {
-                unitNormal.x = -unitNormal.x;
-                unitNormal.y = -unitNormal.y;
-                unitNormal.z = -unitNormal.z;
-            }
 
             double det = sqrt(unitNormal.x * unitNormal.x + unitNormal.y * unitNormal.y + unitNormal.z * unitNormal.z);
             unitNormal.x /= det;
@@ -1329,94 +1410,29 @@ namespace DG
         }
 
         template<Boundary::FunctionCondition::Type ConditionType>
-        static double computeFaceConditionData(const uint8_t localIndex,
-                                               const Coordinates nodes[],
-                                               const size_t tetrahedronNodesTags[constants::tetrahedron::N_NODES],
+        static double computeFaceConditionData(const Coordinates nodes[],
+                                               const size_t triangleNodesTags[constants::tetrahedron::N_NODES],
                                                double conditionValues[])
         {
             Coordinates normal;
             double transpJacobian[LocalCoordinates2D::COUNT * Coordinates::COUNT];
-            switch (localIndex)
-            {
-            case 0:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo0Face(nodes, tetrahedronNodesTags, transpJacobian);
-                computeBoundaryCodnition<ConditionType>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[1]],
-                    conditionValues);
-                break;
-            }
-            case 1:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo1Face(nodes, tetrahedronNodesTags, transpJacobian);
-                computeBoundaryCodnition<ConditionType>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[0]],
-                    conditionValues);
-                break;
-            }
-            case 2:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo2Face(nodes, tetrahedronNodesTags, transpJacobian);
-                computeBoundaryCodnition<ConditionType>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[0]],
-                    conditionValues);
-                break;
-            }
-            case 3:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo3Face(nodes, tetrahedronNodesTags, transpJacobian);
-                computeBoundaryCodnition<ConditionType>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
-                    transpJacobian,
-                    nodes[tetrahedronNodesTags[0]],
-                    conditionValues);
-                break;
-            }
-            }
+            CoordinatesFunctions::computeTranspJacobianToFace(nodes, triangleNodesTags, transpJacobian);
+            computeBoundaryCodnition<ConditionType>(NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::localPoints,
+                transpJacobian,
+                nodes[*triangleNodesTags],
+                conditionValues);
+
+            CoordinatesFunctions::computeNormal(transpJacobian, normal);
+
             return sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);;
         }
 
-        static double computeFaceUnitNormal(const uint8_t localIndex, const Coordinates nodes[], const size_t tetrahedronNodesTags[constants::tetrahedron::N_NODES], Coordinates& unitNormal)
+        static double computeFaceUnitNormal(const Coordinates nodes[], const size_t triangleNodesTags[constants::tetrahedron::N_NODES], Coordinates& unitNormal)
         {
             double transpJacobian[LocalCoordinates2D::COUNT * Coordinates::COUNT];
-            Coordinates sideVector, normal;
-            switch (localIndex)
-            {
-            case 0:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo0Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[0]], nodes[tetrahedronNodesTags[1]], sideVector);
-                break;
-            }
-            case 1:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo1Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[1]], nodes[tetrahedronNodesTags[2]], sideVector);
-                break;
-            }
-            case 2:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo2Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[2]], nodes[tetrahedronNodesTags[3]], sideVector);
-                break;
-            }
-            case 3:
-            {
-                CoordinatesFunctions::computeTranspJacobianTo3Face(nodes, tetrahedronNodesTags, transpJacobian);
-                CoordinatesFunctions::computeDiffrence(nodes[tetrahedronNodesTags[3]], nodes[tetrahedronNodesTags[0]], sideVector);
-                break;
-            }
-            }
-
+            Coordinates normal;
+            CoordinatesFunctions::computeTranspJacobianToFace(nodes, triangleNodesTags, transpJacobian);
             CoordinatesFunctions::computeNormal(transpJacobian, normal);
-            if ((normal.x * sideVector.x + normal.y * sideVector.y + normal.z * sideVector.z) < 0.0)
-            {
-                normal.x = -normal.x;
-                normal.y = -normal.y;
-                normal.z = -normal.z;
-            }
 
             double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
@@ -1513,6 +1529,7 @@ namespace DG
             memoryBuffer = (void*)(dirichletValues + NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps);
 
             Coordinates unitNormal;
+            size_t faceNodesTags[constants::triangle::N_NODES];
 
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
@@ -1521,7 +1538,8 @@ namespace DG
                 size_t elementIndex = *faceIndexIt >> 2;
                 uint8_t localIndex = *faceIndexIt && 3;
 
-                double det = computeFaceConditionData(localIndex, nodes, tetrahedronsNodesTags[elementIndex], dirichletValues, unitNormal);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+                double det = computeFaceConditionData(nodes, faceNodesTags, dirichletValues, unitNormal);
 
                 addDirichletFaceAdjusments(localIndex,
                                            lambda,
@@ -1551,6 +1569,7 @@ namespace DG
                                                     double linearTetrahedronsAdjusments[][Basis::N_FUNCTIONS])
         {
             Coordinates unitNormal;
+            size_t faceNodesTags[constants::triangle::N_NODES];
 
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
@@ -1559,7 +1578,8 @@ namespace DG
                 size_t elementIndex = *faceIndexIt >> 2;
                 uint8_t localIndex = *faceIndexIt && 3;
 
-                double det = computeFaceUnitNormal(localIndex, nodes, tetrahedronsNodesTags[elementIndex],unitNormal);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+                double det = computeFaceUnitNormal(nodes, faceNodesTags, unitNormal);
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1599,6 +1619,8 @@ namespace DG
             size_t elementIndex;
             uint8_t localIndex;
 
+            size_t facesNodesTags[2][constants::triangle::N_NODES];
+
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
                 //double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(*transpMatrixiesIt, determinant); ++transpMatrixiesIt*/;
@@ -1606,7 +1628,8 @@ namespace DG
                 elementIndex = *baseFaceIndexesIt >> 2;
                 localIndex = *baseFaceIndexesIt && 3;
 
-                double det = computeFaceConditionData(localIndex, nodes, tetrahedronsNodesTags[elementIndex], dirichletValues, unitNormal);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[0]);
+                double det = computeFaceConditionData(nodes, facesNodesTags[0], dirichletValues, unitNormal);
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1625,6 +1648,15 @@ namespace DG
                 unitNormal.x = -unitNormal.x;
                 unitNormal.y = -unitNormal.y;
                 unitNormal.z = -unitNormal.z;
+
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[1]);
+
+                uint8_t changingIndexes = computeChangingIndexes(facesNodesTags[0], facesNodesTags[1]);
+                if (changingIndexes != 0)
+                {
+                    NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(dirichletValues, Basis::N_FUNCTIONS, changingIndexes);
+                }
+
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1662,6 +1694,7 @@ namespace DG
             size_t elementIndex;
             uint8_t localIndex;
 
+            size_t faceNodesTags[constants::triangle::N_NODES];
 
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
@@ -1670,7 +1703,8 @@ namespace DG
                 elementIndex = *baseFaceIndexesIt >> 2;
                 localIndex = *baseFaceIndexesIt && 3;
 
-                double det = computeFaceUnitNormal(localIndex, nodes, tetrahedronsNodesTags[elementIndex], unitNormal);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+                double det = computeFaceUnitNormal(nodes, faceNodesTags, unitNormal);
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1730,7 +1764,9 @@ namespace DG
             uint8_t localIndex = *faceIndexIt && 3;
 
             Coordinates unitNormal;
-            computeFaceUnitNormal(localIndex, nodes, tetrahedronsNodesTags[elementIndex], unitNormal);
+            size_t faceNodesTags[constants::triangle::N_NODES];
+            extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+            computeFaceUnitNormal(nodes, faceNodesTags, unitNormal);
 
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
@@ -1739,7 +1775,8 @@ namespace DG
                 elementIndex = *faceIndexIt >> 2;
                 localIndex = *faceIndexIt && 3;
 
-                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::DIRICHLET>(localIndex, nodes, tetrahedronsNodesTags[elementIndex], dirichletValues);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::DIRICHLET>(nodes, faceNodesTags, dirichletValues);
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1776,8 +1813,10 @@ namespace DG
             size_t elementIndex = *faceIndexIt >> 2;
             uint8_t localIndex = *faceIndexIt && 3;
 
-            Coordinates unitNormal;
-            computeFaceUnitNormal(localIndex, nodes, tetrahedronsNodesTags[elementIndex], unitNormal);
+            Coordinates unitNormal, normal;
+            size_t faceNodesTags[constants::triangle::N_NODES];
+            extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+            computeFaceUnitNormal(nodes, faceNodesTags, unitNormal);
 
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
@@ -1786,7 +1825,8 @@ namespace DG
                 elementIndex = *faceIndexIt >> 2;
                 localIndex = *faceIndexIt && 3;
 
-                double det = computeFaceDeterminant(localIndex, nodes, tetrahedronsNodesTags[elementIndex]);
+                CoordinatesFunctions::computeNormal(nodes, faceNodesTags, normal);
+                double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1830,7 +1870,9 @@ namespace DG
             uint8_t localIndex = *baseFaceIndexesIt && 3;
 
             Coordinates unitNormal;
-            computeFaceUnitNormal(localIndex, nodes, tetrahedronsNodesTags[elementIndex], unitNormal);
+            size_t facesNodesTags[2][constants::triangle::N_NODES];
+            extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[0]);
+            computeFaceUnitNormal(nodes, facesNodesTags[0], unitNormal);
 
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
@@ -1839,7 +1881,8 @@ namespace DG
                 elementIndex = *baseFaceIndexesIt >> 2;
                 localIndex = *baseFaceIndexesIt && 3;
 
-                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::DIRICHLET>(localIndex, nodes, tetrahedronsNodesTags[elementIndex], dirichletValues);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[0]);
+                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::DIRICHLET>(nodes, facesNodesTags[0], dirichletValues);
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1854,6 +1897,15 @@ namespace DG
 
                 elementIndex = *neigbourFaceIndexesIt >> 2;
                 localIndex = *neigbourFaceIndexesIt && 3;
+
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[1]);
+
+                uint8_t changingIndexes = computeChangingIndexes(facesNodesTags[0], facesNodesTags[1]);
+                if (changingIndexes != 0)
+                {
+                    NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(dirichletValues, Basis::N_FUNCTIONS, changingIndexes);
+                }
+
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1895,7 +1947,10 @@ namespace DG
             uint8_t localIndex = *baseFaceIndexesIt && 3;
 
             Coordinates unitNormal;
-            computeFaceUnitNormal(localIndex, nodes, tetrahedronsNodesTags[elementIndex], unitNormal);
+            Coordinates normal;
+            size_t facesNodesTags[2][constants::triangle::N_NODES];
+            extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[0]);
+            computeFaceUnitNormal(nodes, facesNodesTags[0], unitNormal);
 
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
@@ -1904,7 +1959,9 @@ namespace DG
                 elementIndex = *baseFaceIndexesIt >> 2;
                 localIndex = *baseFaceIndexesIt && 3;
 
-                double det = computeFaceDeterminant(localIndex, nodes, tetrahedronsNodesTags[elementIndex]);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[0]);
+                CoordinatesFunctions::computeNormal(nodes, facesNodesTags[0], normal);
+                double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
                 addDirichletFaceAdjusments(localIndex,
                     lambda,
@@ -1964,17 +2021,28 @@ namespace DG
             size_t elementIndex;
             uint8_t localIndex;
 
+            size_t facesNodesTags[2][constants::triangle::N_NODES];
+
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
                 elementIndex = *baseFaceIndexesIt >> 2;
                 localIndex = *baseFaceIndexesIt && 3;
-                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::DIRICHLET>(localIndex, nodes, tetrahedronsNodesTags[elementIndex], newmanValues);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[0]);
+                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::NEWMAN>(nodes, facesNodesTags[0], newmanValues);
 
                 FaceLAC<Basis>::computePowerVector(localIndex, newmanValues, newmanVector);
                 addNemanFaceAdjusments<Basis::N_FUNCTIONS>(det, newmanVector, linearTetrahedronsAdjusments1Area[elementIndex]);
 
                 elementIndex = *neigbourFaceIndexesIt >> 2;
                 localIndex = *neigbourFaceIndexesIt && 3;
+
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], facesNodesTags[1]);
+
+                uint8_t changingIndexes = computeChangingIndexes(facesNodesTags[0], facesNodesTags[1]);
+                if (changingIndexes != 0)
+                {
+                    NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(newmanValues, Basis::N_FUNCTIONS, changingIndexes);
+                }
 
                 FaceLAC<Basis>::computePowerVector(localIndex, newmanValues, newmanVector);
                 addNemanFaceAdjusments<Basis::N_FUNCTIONS>(det, newmanVector, linearTetrahedronsAdjusments2Area[elementIndex]);
@@ -1998,11 +2066,14 @@ namespace DG
             size_t elementIndex;
             uint8_t localIndex;
 
+            size_t faceNodesTags[constants::triangle::N_NODES];
+
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
                 elementIndex = *faceIndexIt >> 2;
                 localIndex = *faceIndexIt && 3;
-                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::DIRICHLET>(localIndex, nodes, tetrahedronsNodesTags[elementIndex], newmanValues);
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+                double det = computeFaceConditionData<Boundary::FunctionCondition::Type::DIRICHLET>(nodes, faceNodesTags, newmanValues);
 
                 FaceLAC<Basis>::computePowerVector(localIndex, newmanValues, newmanVector);
                 addNemanFaceAdjusments<Basis::N_FUNCTIONS>(det, newmanVector, linearTetrahedronsAdjusmentsArea[elementIndex]);
@@ -2037,11 +2108,18 @@ namespace DG
             size_t elementIndex;
             uint8_t localIndex;
 
+            size_t faceNodesTags[constants::triangle::N_NODES];
+
+            Coordinates normal;
+
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
                 elementIndex = *baseFaceIndexesIt >> 2;
                 localIndex = *baseFaceIndexesIt && 3;
-                double det = computeFaceDeterminant(localIndex, nodes, tetrahedronsNodesTags[elementIndex]);;
+
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+                CoordinatesFunctions::computeNormal(nodes, faceNodesTags, normal);
+                double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
                 addNemanFaceAdjusments<Basis::N_FUNCTIONS>(nerwmanValue, det, massVectors[localIndex], linearTetrahedronsAdjusments1Area[elementIndex]);
 
@@ -2067,11 +2145,18 @@ namespace DG
             size_t elementIndex;
             uint8_t localIndex;
 
+            size_t faceNodesTags[constants::triangle::N_NODES];
+
+            Coordinates normal;
+
             for (size_t faceIndex = 0; faceIndex < nFaces; ++faceIndex)
             {
                 elementIndex = *faceIndexIt >> 2;
                 localIndex = *faceIndexIt && 3;
-                double det = computeFaceDeterminant(localIndex, nodes, tetrahedronsNodesTags[elementIndex]);;
+
+                extractFaceNodesTags(localIndex, tetrahedronsNodesTags[elementIndex], faceNodesTags);
+                CoordinatesFunctions::computeNormal(nodes, faceNodesTags, normal);
+                double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
                 addNemanFaceAdjusments<Basis::N_FUNCTIONS>(nerwmanValue, det, massVectors[localIndex], linearTetrahedronsAdjusmentsArea[elementIndex]);
 
@@ -2079,6 +2164,7 @@ namespace DG
             }
         }
 
+        /*
         static void processInteriorFacesOnInterface(const size_t* baseFaceIndexesIt,
                                                     const size_t* neigbourFaceIndexesIt,
                                                     const size_t nInteriorFaces,
@@ -2110,7 +2196,7 @@ namespace DG
 
             for (size_t faceIndex = 0; faceIndex < nInteriorFaces; ++faceIndex)
             {
-                double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(*transpMatrixiesIt, determinant); ++transpMatrixiesIt*/;
+                double facePenalty = penalty // geom_funct::computeTriangleDiametr(*transpMatrixiesIt, determinant); ++transpMatrixiesIt/;
 
                 size_t elementIndex0 = *baseFaceIndexesIt >> 2;
                 uint8_t localIndex0 = *baseFaceIndexesIt && 3;
@@ -2197,6 +2283,7 @@ namespace DG
                 ++crossAdjusmentsIt;
             }
         }
+        */
 
 
         static void proceedBoundaries(const Boundary* boundaryIt,
@@ -2672,6 +2759,12 @@ namespace DG
 
         }
 
+        static size_t findFirstStartTetrahedronTag(size_t* regionStartTetrahedronsTagIt)
+        {
+            while (*regionStartTetrahedronsTagIt == 0);
+            return *regionStartTetrahedronsTagIt;
+        }
+
         const int MAX_ITERATIONS = 1'000;
 
         void initSolver()
@@ -2692,17 +2785,16 @@ namespace DG
                                    Solution* solutionIt)
         {
             size_t* regionsStartTetrahedronsIndexes = (size_t*)additionalBuffer;
-            size_t* surfacesFacesStartIndexes = regionsStartTetrahedronsIndexes + nRegions;
-            size_t* regionsStartTetrahedronsTags = surfacesFacesStartIndexes + nBoundaries;
-            size_t* regionsInteriorFacesStartIndexes = regionsStartTetrahedronsTags + nRegions;
+            size_t* surfacesFacesStartIndexes = regionsStartTetrahedronsIndexes + nRegions + 1;
+            size_t* regionsStartTetrahedronsTags = surfacesFacesStartIndexes + nBoundaries + 1;
+            size_t* regionsInteriorFacesStartIndexes = regionsStartTetrahedronsTags + nRegions + 1;
 
-            double** regionsBilinearAdjusments = (double**)(regionsInteriorFacesStartIndexes + nRegions);
-            double** regionsLinearAdjusments = (double**)(regionsBilinearAdjusments + nRegions);
+            double** regionsBilinearAdjusments = (double**)(regionsInteriorFacesStartIndexes + nRegions + 1);
+            double** regionsLinearAdjusments = regionsBilinearAdjusments + nRegions;
 
-            unsigned int** interfacesFragmentsTrianglesIndexes = (unsigned int**)(regionsBilinearAdjusments + nRegions);
+            unsigned int** interfacesFragmentsTrianglesIndexes = (unsigned int**)(regionsLinearAdjusments + nRegions);
             unsigned int* interfacFragmentsCount = (unsigned int*)(interfacesFragmentsTrianglesIndexes + nNonconformInterfaces);
             double** nonconformCrossAdjusments = (double**)(interfacFragmentsCount + nNonconformInterfaces);
-
 
             size_t nNodes = gmsh::model::mesh::getNodesCount();
             Coordinates* nodes = (Coordinates*)malloc((nNodes + 1) * sizeof(Coordinates));
@@ -2711,18 +2803,14 @@ namespace DG
             gmsh::model::mesh::getRegionsTetrahedronsStartIndexes(regionsStartTetrahedronsIndexes);
             size_t nTetrahedrons = regionsStartTetrahedronsIndexes[nRegions];
             double* bilinearAdjusments = (double*)malloc(nTetrahedrons * ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS * sizeof(double));
-            size_t nTetFaces = nTetrahedrons << 2;
-            size_t nTetNodes = nTetrahedrons << 2;
+            size_t nTetFaces = nTetrahedrons * constants::tetrahedron::N_FACES;
+            size_t nTetNodes = nTetrahedrons * constants::tetrahedron::N_NODES;
             size_t* tetFacesIndexes = (size_t*)malloc(nTetFaces * sizeof(size_t));
             size_t* tetBaseFacesIndexes = tetFacesIndexes;
-            size_t* tetNeigbourFacesIndexes = tetFacesIndexes;
+            size_t* tetNeigbourFacesIndexes = tetFacesIndexes + nTetFaces / 2;
             size_t* tetNodesTag = (size_t*)malloc(nTetNodes * sizeof(size_t));
 
-            gmsh::model::mesh::getTetrahedrons(surfacesFacesStartIndexes, regionsStartTetrahedronsTags, tetNodesTag, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
-
-            size_t nUniqueFaces = regionsInteriorFacesStartIndexes[nRegions];
-            size_t (*facesTetrahedronsIndexes)[2] = (size_t(*)[2])malloc((nUniqueFaces << 1) * sizeof(size_t));
-            memset(facesTetrahedronsIndexes, ~0, (nUniqueFaces << 1) * sizeof(size_t));
+            gmsh::model::mesh::getTetrahedrons(regionsStartTetrahedronsTags, tetNodesTag, surfacesFacesStartIndexes, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
 
             size_t nInteriorFaces = regionsInteriorFacesStartIndexes[nRegions] - regionsInteriorFacesStartIndexes[0];
 
@@ -2857,17 +2945,10 @@ namespace DG
             free(nodes);
             free(tetFacesIndexes);
             free(tetNodesTag);
-            free(facesTetrahedronsIndexes);
             free(bilinearAdjusments);
             free(localJacobianMatrixies);
             free(crossBilinearAdjusments);
             free(triplets);
-        }
-
-        static size_t findFirstStartTetrahedronTag(size_t* regionStartTetrahedronsTagIt)
-        {
-            while (*regionStartTetrahedronsTagIt == 0);
-            return *regionStartTetrahedronsTagIt;
         }
 
         void solveIteration(const unsigned int nRegions,
@@ -2910,7 +2991,7 @@ namespace DG
             size_t* tetNeigbourFacesIndexes = tetFacesIndexes;
             size_t* tetNodesTag = (size_t*)malloc(nTetNodes * sizeof(size_t));
 
-            gmsh::model::mesh::getTetrahedrons(surfacesFacesStartIndexes, regionsStartTetrahedronsTags, tetNodesTag, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
+            gmsh::model::mesh::getTetrahedrons(regionsStartTetrahedronsTags, tetNodesTag, surfacesFacesStartIndexes, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
 
 
             size_t nUniqueFaces = regionsInteriorFacesStartIndexes[nRegions];
@@ -3062,12 +3143,12 @@ namespace DG
         {
             unsigned int nEdges, nEmbeddedEdges, nEmbeddedNodes;
             gmsh::model::getSurfaceChildrenCounts(frontTag, &nEdges, &nEmbeddedEdges, &nEmbeddedNodes);
-            int* nodesBuffer = (int*)malloc((nEdges + nEmbeddedEdges) * 2 + nEmbeddedNodes);
+            int* nodesBuffer = (int*)malloc(((nEdges + nEmbeddedEdges) * 2 + nEmbeddedNodes) * sizeof(int));
             gmsh::model::getSurfaceChildrenNodes(frontTag, nodesBuffer + nEmbeddedNodes + 2 * nEmbeddedEdges, nodesBuffer + nEmbeddedNodes, nodesBuffer);
 
             std::set<int> nodesTagSet(nodesBuffer, nodesBuffer + (nEdges + nEmbeddedEdges) * 2 + nEmbeddedNodes);
             unsigned int _nFrontNodes = unsigned int(nodesTagSet.size());
-            realloc(nodesBuffer, nodesTagSet.size() * sizeof(int));
+            nodesBuffer = (int*)realloc(nodesBuffer, _nFrontNodes * sizeof(int));
 
             std::set<int>::const_iterator nodeTagSetIt = nodesTagSet.begin();
             int* nodeTagOutIt = nodesBuffer;
@@ -3094,15 +3175,14 @@ namespace DG
             double commonMultiplier = dt / (latentHeat * (liquidMaterialsPhase.density + solidMaterialsPhase.density) / 2.0);
 
             Coordinates gradientSolidSide, gradientLiquidSide;
-            uint8_t nElementSolidSide, nElementLiquidSide;
 
             for (size_t i = 0; i < nFrontNodes; ++i)
             {
                 initialConditionGradient<MaterialPhase::SOLID>(*frontNodesIt, gradientSolidSide);
-                initialConditionGradient<MaterialPhase::SOLID>(*frontNodesIt, gradientLiquidSide);
+                initialConditionGradient<MaterialPhase::LIQUID>(*frontNodesIt, gradientLiquidSide);
                 double flowSolidSide = gradientSolidSide.x * normalIt->x + gradientSolidSide.y * normalIt->y + gradientSolidSide.z * normalIt->z;
                 double flowLiquidSide = gradientLiquidSide.x * normalIt->x + gradientLiquidSide.y * normalIt->y + gradientLiquidSide.z * normalIt->z;
-                double moveCoeff = (flowSolidSide / nElementSolidSide + flowLiquidSide / nElementLiquidSide) / 2;
+                double moveCoeff = commonMultiplier * (flowSolidSide + flowLiquidSide) / 2;
 
                 frontNodesIt->x += moveCoeff * normalIt->x;
                 frontNodesIt->y += moveCoeff * normalIt->y;
@@ -3113,16 +3193,16 @@ namespace DG
             }
         }
 
-        static void relocateFrontNodes(const Solution& solution,
-                                       int solidRegionTag,
-                                       int liquidRegionTag,
-                                       MaterialPhase solidMaterialsPhase,
-                                       MaterialPhase liquidMaterialsPhase,
-                                       const double dt,
-                                       const double latentHeat,
-                                       const Coordinates* normalIt,
-                                       const unsigned int nFrontNodes,
-                                       Coordinates* frontNodesIt)
+        void relocateFrontNodes(const Solution& solution,
+                                int solidRegionTag,
+                                int liquidRegionTag,
+                                MaterialPhase solidMaterialsPhase,
+                                MaterialPhase liquidMaterialsPhase,
+                                const double dt,
+                                const double latentHeat,
+                                const Coordinates* normalIt,
+                                const unsigned int nFrontNodes,
+                                Coordinates* frontNodesIt)
         {
             LocalCoordinates3D localGradient;
             Coordinates gradient;
@@ -3142,7 +3222,6 @@ namespace DG
             uint8_t nElements;
             int entityTag;
 
-            LocalCoordinates3D localGradient;
             double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
             double localJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
 
@@ -3170,6 +3249,8 @@ namespace DG
                 gradientLiquidSideSum.z = 0;
                 
 
+                nElementSolidSide = 0;
+                nElementLiquidSide = 0;
                 for (uint8_t j = 0; j < nElements; ++j)
                 {
                     gmsh::model::mesh::get3DElement(elementsTags[j], tetrahedronNodeTags, (double*)tetrahedronNodes, &entityTag);

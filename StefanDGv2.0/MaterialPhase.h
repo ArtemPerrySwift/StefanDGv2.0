@@ -4,7 +4,7 @@
 
 struct MaterialPhase
 {
-	static enum State : uint8_t { SOLID, LIQUID };
+	enum State : uint8_t { SOLID, LIQUID };
 
 	State state;
 	double thermalConductivity;

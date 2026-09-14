@@ -665,7 +665,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
     gmsh::model::surfaces::getSurfaces(surfacesTags, surfacesTypes, surfacesPGs);
 
     int nPGs = gmsh::model::physical_groups::getCount();
-    void* PGsMemoryPull = malloc((nPGs << 2 + 1) * sizeof(int));
+    void* PGsMemoryPull = malloc((2 * nPGs  + 1) * sizeof(int));
 
     int* PGsTags = (int*)PGsMemoryPull;
     unsigned int* PGsNamesStartIndexes = (unsigned int*)(PGsTags + nPGs);
@@ -696,12 +696,11 @@ Model::Error Model::initilizeByCurrentGMSHModel()
         free(PGsNames);
         free(valueConditions);
         free(conditions);
-        free(surfacesTypes);
 
         return Error::E_CONDITIONS;
     }
 
-    realloc(valueConditions, nValueConditions * sizeof(Boundary::ValueCondition));
+    valueConditions = (Boundary::ValueCondition*)realloc(valueConditions, nValueConditions * sizeof(Boundary::ValueCondition));
     this->valueConditions = valueConditions;
 
     err = initilizeBoundaries(PGsTags + dimensionsPGsStartIndexes[2], nSurfacesPGs, conditions, surfacesPGsStartIndexes, surfacesPGs, nSurfaces, surfacesTypes, boundaries);
@@ -719,7 +718,6 @@ Model::Error Model::initilizeByCurrentGMSHModel()
         free(PGsNames);
         free(valueConditions);
         free(conditions);
-        free(surfacesTypes);
 
         return Error::E_BOUNDARIES;
     }
@@ -743,7 +741,6 @@ Model::Error Model::initilizeByCurrentGMSHModel()
         free(valueConditions);
         free(conditions);
         free(materialPhases);
-        free(surfacesTypes);
 
         return Error::E_MATERIAL_PHASES;
     }
@@ -778,7 +775,6 @@ Model::Error Model::initilizeByCurrentGMSHModel()
         free(valueConditions);
         free(conditions);
         free(materialPhases);
-        free(surfacesTypes);
 
         return Error::E_REGIONS;
     }
@@ -802,7 +798,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
                                                              noncofnormInterfaces,
                                                              &(this->frontTag));
 
-    realloc(conformConditions, nConformConditions * sizeof(Boundary::ConformCondition));
+    conformConditions = (Boundary::ConformCondition*)realloc(conformConditions, nConformConditions * sizeof(Boundary::ConformCondition));
 
     this->nNonconformInterfaces = nNonconformInterfaces;
     this->nonconformInterfaces = noncofnormInterfaces;
@@ -814,7 +810,6 @@ Model::Error Model::initilizeByCurrentGMSHModel()
     free(surfacesPGs);
     free(PGsMemoryPull);
     free(conditions);
-    free(surfacesTypes);
 
     return Error::NO_ERRORS;
 }

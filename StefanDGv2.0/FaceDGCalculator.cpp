@@ -59,6 +59,7 @@ namespace DG
 		}
 	}
 
+	/*
 	template<class Basis>
 	void FaceLAC<Basis>::changeIntegrationValuesOrder(double values[N_BASIS_VALUES], const uint8_t nodesChangins[constants::triangle::N_NODES])
 	{
@@ -82,6 +83,7 @@ namespace DG
 		values += NumericalIntegrationMethod::nSteps;
 		NumericalIntegrationMethod::changeIntegrationValuesOrder(values, nodesChangins, outValues);
 	}
+	*/
 
 	template <class Basis>
 	const double(*FaceLAC<Basis>::getValuesByFace())[N_BASIS_VALUES]

@@ -23,6 +23,8 @@ namespace DG
 			       const size_t nTSteps,
 			       Solution* solutionIt);
 
+		double* computeInitialDOFs(const unsigned int nRegions, const MaterialPhase* const regionsMaterialPhases[], size_t* regionsStartTetrahedronsIndexes);
+
 		void solveInitialIteration(const unsigned int nRegions,
 								   const MaterialPhase* const regionsMaterialPhases[],
 								   const Boundary boundaries[],

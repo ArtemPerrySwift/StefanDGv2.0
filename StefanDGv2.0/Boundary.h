@@ -19,7 +19,7 @@ struct Boundary
 		friend struct ValueCondition;
 		friend struct ConformCondition;
 
-		static enum class MacroType: uint8_t { DIRICHLET_F, DIRICHLET_V, NEWMAN_F, NEWMAN_V, STEFAN_V, CONFORM_INTERFACE, NONCONFORM_INTERFACE, HOMOGENEOUS_NEWMAN};
+		enum class MacroType: uint8_t { DIRICHLET_F, DIRICHLET_V, NEWMAN_F, NEWMAN_V, STEFAN_V, CONFORM_INTERFACE, NONCONFORM_INTERFACE, HOMOGENEOUS_NEWMAN};
 		const MacroType macroType;
 
 	private:
@@ -28,7 +28,7 @@ struct Boundary
 
 	struct ImplicitCondition : public Condition
 	{
-		static enum class Type : uint8_t { NONCONFORM_INTERFACE = MacroType::NONCONFORM_INTERFACE, 
+		enum class Type : uint8_t { NONCONFORM_INTERFACE = MacroType::NONCONFORM_INTERFACE, 
 										   HOMOGENEOUS_NEWMAN = MacroType::HOMOGENEOUS_NEWMAN};
 
 		ImplicitCondition(Type type);
@@ -42,7 +42,7 @@ struct Boundary
 
 	struct FunctionCondition : public Condition
 	{
-		static enum class Type : uint8_t { DIRICHLET = MacroType::DIRICHLET_F, NEWMAN = MacroType::NEWMAN_F};
+		enum class Type : uint8_t { DIRICHLET = MacroType::DIRICHLET_F, NEWMAN = MacroType::NEWMAN_F};
 		FunctionCondition(Type type);
 
 		static void computeDirichletValues(const Coordinates points[], uint8_t nPoints, double values[])
@@ -70,7 +70,7 @@ struct Boundary
 
 	struct ValueCondition : public Condition
 	{
-		static enum class Type : uint8_t { DIRICHLET = MacroType::DIRICHLET_V, NEWMAN = MacroType::NEWMAN_V, STEFAN = MacroType::STEFAN_V };
+		enum class Type : uint8_t { DIRICHLET = MacroType::DIRICHLET_V, NEWMAN = MacroType::NEWMAN_V, STEFAN = MacroType::STEFAN_V };
 		double value;
 
 		ValueCondition(Type type, double value);

@@ -41,11 +41,14 @@ namespace CoordinatesFunctions
 									  const LocalCoordinates2D translCoeff[2],
 									  LocalCoordinates2D* trianglePointIt);
 
+	void computeTranspJacobianToFace(const Coordinates nodes[], const size_t* triangleNodeIndexIt, double transpJacobianMatrix[LocalCoordinates2D::COUNT * Coordinates::COUNT]);
 
+	/*
 	void computeTranspJacobianTo0Face(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double transpJacobianMatrix[LocalCoordinates2D::COUNT * Coordinates::COUNT]);
 	void computeTranspJacobianTo1Face(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double transpJacobianMatrix[LocalCoordinates2D::COUNT * Coordinates::COUNT]);
 	void computeTranspJacobianTo2Face(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double transpJacobianMatrix[LocalCoordinates2D::COUNT * Coordinates::COUNT]);
 	void computeTranspJacobianTo3Face(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double transpJacobianMatrix[LocalCoordinates2D::COUNT * Coordinates::COUNT]);
+	*/
 
 	void computeNormal(const double transpJacobianMatrix[LocalCoordinates2D::COUNT * Coordinates::COUNT], Coordinates& normal);
 
@@ -93,6 +96,8 @@ namespace CoordinatesFunctions
 	void coomputeDirectionalDerivative(const Coordinates* gradientIt, const uint16_t nGradients, const Coordinates direction, double* directionalDerivativeIt);
 
 	double computeTriangleDeterminant(const Coordinates points[], const size_t trianglePointsIndexes[constants::triangle::N_NODES]);
+	
 	void computeNormal(const Coordinates trianglePoints[constants::triangle::N_NODES], Coordinates& normal);
+	void computeNormal(const Coordinates nodes[], const size_t triangleNodesIndexes[constants::triangle::N_NODES], Coordinates& normal);
 };
 

@@ -8,18 +8,14 @@
 #include "Model.h"
 
 const char timeMeshFileName[] = "TimeMesh.txt";
-const char penaltyFileName[] = "Penalty.txt";
-const char latentHeatFileName[] = "LatentHeat.txt";
 const char gmshInitialModelName[] = "Stefan";
 const char gmshInitialModelFileName[] = "./Models/Stefan.geo";
 
 enum Error {
 	OPENING_TIME_FILE = 1,
 	READING_TIME_PARAMETERS,
-	OPENING_PENALTY_FILE,
-	READING_PENALTY_PARAMETER,
-	OPENING_LATENT_HEAT_FILE,
-	READING_LATENT_HEAT_PARAMETER,
+	OPENING_PARAMETER_FILE,
+	READING_PARAMETER,
 	READING_MODEL
 };
 
@@ -43,52 +39,88 @@ static uint8_t readTimeParameters(double* tMin, double* tMax, size_t* nTSteps)
 	return 0;
 }
 
-static uint8_t readPenalty(double* penalty)
+static uint8_t readParameter(const char parameterName[], const char parameterFileName[], double* parameter)
 {
-	FILE* penaltyFile = fopen(penaltyFileName, "r");
+	FILE* penaltyFile = fopen(parameterFileName, "r");
 
 	if (penaltyFile == NULL)
 	{
-		printf("Error: unable to open file %s \n", penaltyFileName);
-		return Error::OPENING_PENALTY_FILE;
+		printf("Error: unable to open file %s \n", parameterFileName);
+		return Error::OPENING_PARAMETER_FILE;
 	}
 
-	if (fscanf(penaltyFile, "%lf", penalty) != 1)
+	if (fscanf(penaltyFile, "%lf", parameter) != 1)
 	{
-		printf("Error: unable to read penalty parameter in file %s\n", penaltyFileName);
-		return Error::READING_PENALTY_PARAMETER;
+		printf("Error: unable to read %s in file %s\n", parameterName, parameterFileName);
+		return Error::READING_PARAMETER;
 	}
 
 	fclose(penaltyFile);
 	return 0;
 }
 
-static uint8_t readLatentHeat(double* latentHeat)
+static void test()
 {
-	FILE* latentHeatFile = fopen(penaltyFileName, "r");
+	gmsh::open(gmshInitialModelFileName);
 
-	if (latentHeatFile == NULL)
-	{
-		printf("Error: unable to open file %s \n", penaltyFileName);
-		return Error::OPENING_LATENT_HEAT_FILE;
-	}
+	gmsh::model::mesh::generate();
 
-	if (fscanf(latentHeatFile, "%lf", latentHeat) != 1)
-	{
-		printf("Error: unable to latent heat parameter in file %s\n", penaltyFileName);
-		return Error::READING_LATENT_HEAT_PARAMETER;
-	}
+	DG::Solution sol;
+	const unsigned int nRegions = 4;
+	const unsigned int nBoundaries = 23;
+	const unsigned int nNonconformInterfaces = 2;
+	size_t memoryBufferSize = (3 * (nRegions + 1) + nBoundaries + 1) * sizeof(size_t) +
+		2 * nRegions * sizeof(double*) +
+		nNonconformInterfaces * (sizeof(unsigned int*) +  sizeof(unsigned int) + sizeof(double*));
+	size_t* modelMemoryBuffer = (size_t*)malloc((3 * (nRegions + 1) + nBoundaries + 1) * sizeof(size_t) +
+		2 * nRegions * sizeof(double*) +
+		nNonconformInterfaces * (sizeof(unsigned int*) + sizeof(unsigned int) + sizeof(double*)) + 100);
 
-	fclose(latentHeatFile);
-	return 0;
+	double* calculationBuffer = (double*)malloc(1024 * sizeof(double));
+
+	/*DG::StefanTask::solveInitialIteration(nRegions,
+		nullptr,
+		nullptr,
+		nBoundaries,
+		nullptr,
+		nNonconformInterfaces,
+		1.0,
+		0.0,
+		calculationBuffer,
+		modelMemoryBuffer,
+		&sol);*/
+
+	/*size_t* regionsStartTetrahedronsIndexes = (size_t*)modelMemoryBuffer;
+	size_t* surfacesFacesStartIndexes = regionsStartTetrahedronsIndexes + nRegions + 1;
+	size_t* regionsStartTetrahedronsTags = surfacesFacesStartIndexes + nBoundaries + 1;
+	size_t* regionsInteriorFacesStartIndexes = regionsStartTetrahedronsTags + nRegions + 1;*/
+
+	size_t regionsStartTetrahedronsIndexes[nRegions + 1];
+	size_t surfacesFacesStartIndexes[nBoundaries + 1];
+	size_t regionsStartTetrahedronsTags[nRegions + 1];
+	size_t regionsInteriorFacesStartIndexes[nRegions + 1];
+
+	size_t nNodes = gmsh::model::mesh::getNodesCount();
+	Coordinates* nodes = (Coordinates*)malloc((nNodes + 1) * sizeof(Coordinates));
+	gmsh::model::mesh::getNodes((double(*)[3])nodes);
+
+	gmsh::model::mesh::getRegionsTetrahedronsStartIndexes(regionsStartTetrahedronsIndexes);
+	size_t nTetrahedrons = regionsStartTetrahedronsIndexes[nRegions];
+	size_t nTetFaces = nTetrahedrons * constants::tetrahedron::N_FACES;
+	size_t* tetFacesIndexes = (size_t*)malloc(nTetFaces * sizeof(size_t));
+	size_t* tetBaseFacesIndexes = tetFacesIndexes;
+	size_t* tetNeigbourFacesIndexes = tetFacesIndexes + nTetFaces / 2;
+
+	size_t nTetNodes = nTetrahedrons * constants::tetrahedron::N_NODES;
+	size_t* tetNodesTag = (size_t*)malloc(nTetNodes * sizeof(size_t));
+
+	gmsh::model::mesh::getTetrahedrons(tetNodesTag);
+	gmsh::model::mesh::getTetrahedrons(regionsStartTetrahedronsTags, tetNodesTag, surfacesFacesStartIndexes, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
+
 }
-
-
 
 int main()
 {
-	gmsh::initialize();
-
 	double tMin, tMax;
 	size_t nTSteps;
 
@@ -99,20 +131,22 @@ int main()
 	}
 
 	double penalty;
-	err = readPenalty(&penalty);
+	err = readParameter("Penalty", "Penalty.txt", &penalty);
 	if (err)
 	{
 		return err;
 	}
 
 	double latentHeat;
-	err = readLatentHeat(&latentHeat);
+	err = readParameter("LatentHeat", "LatentHeat.txt", &latentHeat);
 	if (err)
 	{
 		return err;
 	}
 
 	gmsh::initialize();
+	test();
+	return 0;
 	gmsh::open(gmshInitialModelFileName);
 
 	gmsh::model::mesh::generate();
@@ -164,6 +198,36 @@ int main()
 		liquidMaterialsPhase = model.regionsMaterialPhases[frontBoundary->regionsIndexes[0]];
 	}
 
+	size_t memoryBufferSize = (3 * (model.nRegions + 1) + model.nBoundaries + 1) * sizeof(size_t) +
+							  2 * model.nRegions * sizeof(double*) +
+							  model.nNonconformInterfaces * sizeof(unsigned int*) +
+							  model.nNonconformInterfaces * sizeof(unsigned int) +
+							  model.nNonconformInterfaces * sizeof(double*);
+	size_t* modelMemoryBuffer = (size_t*)malloc((3 * (model.nRegions + 1) + model.nBoundaries + 1) * sizeof(size_t) + 
+												 2* model.nRegions * sizeof(double*) + 
+												 model.nNonconformInterfaces * sizeof(unsigned int*) +
+												 model.nNonconformInterfaces * sizeof(unsigned int) +
+												 model.nNonconformInterfaces * sizeof(double*));
+
+	double* calculationBuffer = (double*)malloc(1024 * sizeof(double));
+
+	DG::StefanTask::solveInitialIteration(model.nRegions,
+		model.regionsMaterialPhases,
+		model.boundaries,
+		model.nBoundaries,
+		model.nonconformInterfaces,
+		model.nNonconformInterfaces,
+		dt,
+		penalty,
+		calculationBuffer,
+		modelMemoryBuffer,
+		currentSolution);
+
+	double* initialDOFs = DG::StefanTask::computeInitialDOFs(model.nRegions, model.regionsMaterialPhases, modelMemoryBuffer);
+	int viewTag = gmsh::view::add(gmshInitialModelName);
+	gmsh::view::addTetrahedronsNodesData(viewTag, 0, gmshInitialModelName, initialDOFs, tMin);
+	free(initialDOFs);
+
 	int* frontNodeTags;
 	unsigned int nFrontNodes;
 	DG::StefanTask::getFrontNodes(model.frontTag, &frontNodeTags, &nFrontNodes);
@@ -174,14 +238,16 @@ int main()
 
 	DG::StefanTask::relocateInitialFrontNodes(*solidMaterialsPhase, *liquidMaterialsPhase,dt, latentHeat, frontNormals, nFrontNodes, frontNodes);
 
-	char* gmshModelName = (char*)malloc(sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)));
-	char* gmshModelFileName = (char*)malloc(sizeof(gmshInitialModelFileName) + (int)floor(log10(nTIntervals)));
+
+	char* gmshModelName = (char*)malloc(sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)) + 1);
+	char* gmshModelFileName = (char*)malloc(sizeof(gmshInitialModelFileName) + (int)floor(log10(nTIntervals)) + sizeof("_.geo_unrolled"));
 
 	strcpy(gmshModelName, gmshInitialModelName);
 	strcpy(gmshModelFileName, gmshInitialModelFileName);
 
-	strcpy(gmshModelFileName + sizeof(gmshInitialModelFileName) - 1, "_1.geo");
+	strcpy(gmshModelFileName + sizeof(gmshInitialModelFileName) - 5, "_1.geo_unrolled");
 	strcpy(gmshModelName + sizeof(gmshInitialModelName) - 1, "_1");
+
 
 	gmsh::model::add(gmshModelName);
 	gmsh::merge(gmshInitialModelFileName);
@@ -190,10 +256,14 @@ int main()
 
 	gmsh::model::mesh::generate();
 
-	size_t* modelMemoryBuffer = (size_t*)malloc((3 * (model.nRegions + 1) + model.nBoundaries + 1) * sizeof(size_t));
-	double* calculationBuffer = (double*)malloc(1024 * sizeof(double));
+	//gmsh::fltk::run();
+	//gmsh::finalize();
+	//return 0;
 
 	DG::StefanTask::initSolver();
+
+	//initialDOFs = DG::StefanTask::computeInitialDOFs(model.nRegions, model.regionsMaterialPhases, modelMemoryBuffer);
+	//free(initialDOFs);
 
 	DG::StefanTask::solveInitialIteration(model.nRegions,
 										  model.regionsMaterialPhases,
@@ -207,6 +277,8 @@ int main()
 										  modelMemoryBuffer,
 										  currentSolution);
 
+	viewTag = gmsh::view::add(gmshModelName);
+	gmsh::view::addTetrahedronsNodesData(viewTag, 1, gmshModelName, currentSolution->getDOFs(), tMin + dt);
 
 
 	const uint8_t DEBUG_DOFS_SIZE = 4;
@@ -226,13 +298,13 @@ int main()
 										   nFrontNodes,
 										   frontNodes);
 
-		sprintf(gmshModelName + sizeof(gmshInitialModelName), "%zu.geo", i);
+		sprintf(gmshModelName + sizeof(gmshInitialModelName) + 1, "%zu", i);
 		gmsh::model::add(gmshModelName);
 
 		gmsh::merge(gmshModelFileName);
 
 		gmsh::model::setNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
-		sprintf(gmshModelFileName + sizeof(gmshInitialModelFileName), "%zu.geo", i);
+		sprintf(gmshModelFileName + sizeof(gmshInitialModelFileName), "%zu.geo_unrolled", i);
 		gmsh::write(gmshModelFileName);
 
 		gmsh::model::mesh::generate();
@@ -250,7 +322,7 @@ int main()
 									   modelMemoryBuffer,
 									   currentSolution);
 
-		int viewTag = gmsh::view::add(gmshModelName);
+		viewTag = gmsh::view::add(gmshModelName);
 		gmsh::view::addTetrahedronsNodesData(viewTag, i, gmshModelName, currentSolution->getDOFs(), tMin + i * dt);
 
 		previousSolution->clear();
@@ -262,6 +334,7 @@ int main()
 	free(modelMemoryBuffer);
 	free(calculationBuffer);
 
+	gmsh::fltk::run();
 	gmsh::finalize();
 
 	return 0;
