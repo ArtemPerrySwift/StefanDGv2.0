@@ -12,7 +12,6 @@ namespace CoordinatesFunctions
 
     void computeTransitionMatrix2DExcludeX(const Coordinates nodes[], const size_t* triangleNodeIndexIt, double transitionMatrix[4])
     {
-        ++triangleNodeIndexIt;
         const Coordinates* tetrahedroBeginNodeIt = nodes + *triangleNodeIndexIt;
         ++triangleNodeIndexIt;
         const Coordinates* directionNodesPtr = nodes + *triangleNodeIndexIt;

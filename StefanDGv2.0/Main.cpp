@@ -104,18 +104,19 @@ static void test()
 	Coordinates* nodes = (Coordinates*)malloc((nNodes + 1) * sizeof(Coordinates));
 	gmsh::model::mesh::getNodes((double(*)[3])nodes);
 
+	gmsh::model::mesh::getSurfacesTrianglesStartIndexes(surfacesFacesStartIndexes);
 	gmsh::model::mesh::getRegionsTetrahedronsStartIndexes(regionsStartTetrahedronsIndexes);
 	size_t nTetrahedrons = regionsStartTetrahedronsIndexes[nRegions];
-	size_t nTetFaces = nTetrahedrons * constants::tetrahedron::N_FACES;
-	size_t* tetFacesIndexes = (size_t*)malloc(nTetFaces * sizeof(size_t));
+	size_t tetFecasBufferSize = nTetrahedrons * constants::tetrahedron::N_FACES + surfacesFacesStartIndexes[nBoundaries];
+	size_t* tetFacesIndexes = (size_t*)malloc(tetFecasBufferSize * sizeof(size_t));
 	size_t* tetBaseFacesIndexes = tetFacesIndexes;
-	size_t* tetNeigbourFacesIndexes = tetFacesIndexes + nTetFaces / 2;
+	size_t* tetNeigbourFacesIndexes = tetFacesIndexes + tetFecasBufferSize / 2;
 
 	size_t nTetNodes = nTetrahedrons * constants::tetrahedron::N_NODES;
 	size_t* tetNodesTag = (size_t*)malloc(nTetNodes * sizeof(size_t));
 
 	gmsh::model::mesh::getTetrahedrons(tetNodesTag);
-	gmsh::model::mesh::getTetrahedrons(regionsStartTetrahedronsTags, tetNodesTag, surfacesFacesStartIndexes, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
+	gmsh::model::mesh::getTetrahedrons(regionsStartTetrahedronsTags, tetNodesTag, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
 
 }
 
@@ -145,8 +146,8 @@ int main()
 	}
 
 	gmsh::initialize();
-	test();
-	return 0;
+	//test();
+	//return 0;
 	gmsh::open(gmshInitialModelFileName);
 
 	gmsh::model::mesh::generate();
@@ -211,18 +212,6 @@ int main()
 
 	double* calculationBuffer = (double*)malloc(1024 * sizeof(double));
 
-	DG::StefanTask::solveInitialIteration(model.nRegions,
-		model.regionsMaterialPhases,
-		model.boundaries,
-		model.nBoundaries,
-		model.nonconformInterfaces,
-		model.nNonconformInterfaces,
-		dt,
-		penalty,
-		calculationBuffer,
-		modelMemoryBuffer,
-		currentSolution);
-
 	double* initialDOFs = DG::StefanTask::computeInitialDOFs(model.nRegions, model.regionsMaterialPhases, modelMemoryBuffer);
 	int viewTag = gmsh::view::add(gmshInitialModelName);
 	gmsh::view::addTetrahedronsNodesData(viewTag, 0, gmshInitialModelName, initialDOFs, tMin);
@@ -271,6 +260,7 @@ int main()
 										  model.nBoundaries,
 										  model.nonconformInterfaces,
 										  model.nNonconformInterfaces,
+										  tMin + dt,
 										  dt,
 										  penalty,
 										  calculationBuffer,
@@ -285,6 +275,7 @@ int main()
 
 	for (size_t i = 2; i < nTSteps; ++i)
 	{
+		double t = tMin + i * dt;
 		gmsh::model::getNormals(model.frontTag, (double*)frontNodes, nFrontNodes, (double*)frontNormals);
 
 		DG::StefanTask::relocateFrontNodes(*previousSolution,
@@ -315,6 +306,7 @@ int main()
 									   model.nBoundaries,
 									   model.nonconformInterfaces,
 									   model.nNonconformInterfaces,
+									   t,
 									   dt,
 									   penalty,
 			                           *previousSolution,
@@ -323,7 +315,7 @@ int main()
 									   currentSolution);
 
 		viewTag = gmsh::view::add(gmshModelName);
-		gmsh::view::addTetrahedronsNodesData(viewTag, i, gmshModelName, currentSolution->getDOFs(), tMin + i * dt);
+		gmsh::view::addTetrahedronsNodesData(viewTag, i, gmshModelName, currentSolution->getDOFs(), t);
 
 		previousSolution->clear();
 		std::swap(previousSolution, currentSolution);
@@ -333,6 +325,9 @@ int main()
 	free(gmshModelFileName);
 	free(modelMemoryBuffer);
 	free(calculationBuffer);
+
+	model.clear();
+	DG::StefanTask::finalizeSolver();
 
 	gmsh::fltk::run();
 	gmsh::finalize();

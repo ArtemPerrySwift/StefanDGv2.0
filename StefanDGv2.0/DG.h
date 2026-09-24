@@ -11,6 +11,7 @@ namespace DG
 	namespace StefanTask
 	{
 		void initSolver();
+		void finalizeSolver();
 
 		void solve(const unsigned int nRegions,
 			       const MaterialPhase* const regionsMaterialPhases[],
@@ -25,24 +26,26 @@ namespace DG
 
 		double* computeInitialDOFs(const unsigned int nRegions, const MaterialPhase* const regionsMaterialPhases[], size_t* regionsStartTetrahedronsIndexes);
 
-		void solveInitialIteration(const unsigned int nRegions,
+		double solveInitialIteration(const unsigned int nRegions,
 								   const MaterialPhase* const regionsMaterialPhases[],
 								   const Boundary boundaries[],
 								   const unsigned int nBoundaries,
 								   const NonconformInterface nonconformInterfaces[],
 								   const unsigned int nNonconformInterfaces,
+								   const double t,
 								   const double dt,
 								   const double penalty,
 								   void* calculationBuffer,
 								   void* additionalBuffer,
 								   Solution* solutionIt);
 
-		void solveIteration(const unsigned int nRegions,
+		double solveIteration(const unsigned int nRegions,
 						    const MaterialPhase* const regionsMaterialPhases[],
 						    const Boundary boundaries[],
 						    const unsigned int nBoundaries,
 						    const NonconformInterface nonconformInterfaces[],
 						    const unsigned int nNonconformInterfaces,
+							const double t,
 						    const double dt,
 						    const double penalty,
 						    const Solution& solution,
@@ -76,24 +79,26 @@ namespace DG
 	class Solution
 	{
 	public:
-		friend void StefanTask::solveInitialIteration(const unsigned int nRegions,
+		friend double StefanTask::solveInitialIteration(const unsigned int nRegions,
 													  const MaterialPhase* const regionsMaterialPhases[],
 													  const Boundary boundaries[],
 													  const unsigned int nBoundaries,
 													  const NonconformInterface nonconformInterfaces[],
 													  const unsigned int nNonconformInterfaces,
+												      const double t,
 													  const double dt,
 													  const double penalty,
 													  void* calculationBuffer,
 													  void* additionalBuffer,
 													  Solution* solutionIt);
 
-		friend void StefanTask::solveIteration(const unsigned int nRegions,
+		friend double StefanTask::solveIteration(const unsigned int nRegions,
 											   const MaterialPhase* const regionsMaterialPhases[],
 											   const Boundary boundaries[],
 											   const unsigned int nBoundaries,
 											   const NonconformInterface nonconformInterfaces[],
 											   const unsigned int nNonconformInterfaces,
+											   const double t,
 											   const double dt,
 											   const double penalty,
 											   const Solution& solution,

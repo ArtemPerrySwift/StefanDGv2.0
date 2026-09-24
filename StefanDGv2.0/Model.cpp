@@ -630,16 +630,9 @@ Model::Error Model::initilizeByCurrentGMSHModel()
     unsigned int nRegions = gmsh::model::regions::getCount();
     unsigned int nSurfaces = gmsh::model::surfaces::getCount();
 
-    this->nRegions = nRegions;
-    this->nBoundaries = nSurfaces;
-
     Boundary* boundaries = (Boundary*)malloc(nSurfaces * sizeof(Boundary));
     const MaterialPhase** regionsMaterialPhases = (const MaterialPhase**)malloc(nRegions * sizeof(MaterialPhase*));
     int* regionsTags = (int*)malloc(nRegions * sizeof(int));
-
-    this->boundaries = boundaries;
-    this->regionsMaterialPhases = regionsMaterialPhases;
-    this->regionsTags = regionsTags;
 
     void* regionsMemoryPull = malloc(((nRegions + 1) << 1) * sizeof(int));
     unsigned int* regionsBoundariesStartIndexes = (unsigned int*)(regionsMemoryPull);
@@ -700,8 +693,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
         return Error::E_CONDITIONS;
     }
 
-    valueConditions = (Boundary::ValueCondition*)realloc(valueConditions, nValueConditions * sizeof(Boundary::ValueCondition));
-    this->valueConditions = valueConditions;
+    //valueConditions = (Boundary::ValueCondition*)realloc(valueConditions, nValueConditions * sizeof(Boundary::ValueCondition));
 
     err = initilizeBoundaries(PGsTags + dimensionsPGsStartIndexes[2], nSurfacesPGs, conditions, surfacesPGsStartIndexes, surfacesPGs, nSurfaces, surfacesTypes, boundaries);
 
@@ -779,8 +771,6 @@ Model::Error Model::initilizeByCurrentGMSHModel()
         return Error::E_REGIONS;
     }
 
-    this->regionsMaterialPhases = regionsMaterialPhases;
-
     NonconformInterface* noncofnormInterfaces = (NonconformInterface*)malloc(nNonconformInterfaces * sizeof(NonconformInterface));
     Boundary::ConformCondition* conformConditions = (Boundary::ConformCondition*)malloc((nSurfaces - nSurfacesPGs) * sizeof(Boundary::ConformCondition));
 
@@ -800,9 +790,6 @@ Model::Error Model::initilizeByCurrentGMSHModel()
 
     conformConditions = (Boundary::ConformCondition*)realloc(conformConditions, nConformConditions * sizeof(Boundary::ConformCondition));
 
-    this->nNonconformInterfaces = nNonconformInterfaces;
-    this->nonconformInterfaces = noncofnormInterfaces;
-    this->conformConditions = conformConditions;
 
     free(regionsMemoryPull);
     free(regionsAdditionMemoryPull);
@@ -810,6 +797,19 @@ Model::Error Model::initilizeByCurrentGMSHModel()
     free(surfacesPGs);
     free(PGsMemoryPull);
     free(conditions);
+
+    this->nRegions = nRegions;
+    this->nBoundaries = nSurfaces;
+
+    this->nNonconformInterfaces = nNonconformInterfaces;
+    this->nonconformInterfaces = noncofnormInterfaces;
+    this->conformConditions = conformConditions;
+
+    this->boundaries = boundaries;
+    this->regionsMaterialPhases = regionsMaterialPhases;
+    this->regionsTags = regionsTags;
+
+    this->valueConditions = valueConditions;
 
     return Error::NO_ERRORS;
 }
