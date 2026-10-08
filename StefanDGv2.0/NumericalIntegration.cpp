@@ -47,6 +47,10 @@ namespace NumericalIntegration
 			++vectors2;
 
 			sum += vectors1->x * vectors2->x + vectors1->y * vectors2->y + vectors1->z * vectors2->z;
+			++vectors1;
+			++vectors2;
+
+			sum += vectors1->x * vectors2->x + vectors1->y * vectors2->y + vectors1->z * vectors2->z;
 			return sum * weight;
 		}
 	}
@@ -116,9 +120,17 @@ namespace NumericalIntegration
 
 		void Gauss<2>::changeValuesOrder(const double values[nSteps], const uint8_t nodesChangins, double outValues[nSteps])
 		{
-			outValues[nodesChangins & 0b11] = *values;
-			outValues[(nodesChangins >> 2) & 0b11] = *(++values);
-			outValues[nodesChangins >> 4] = *(++values);
+			//outValues[nodesChangins & 0b11] = *values;
+			//outValues[(nodesChangins >> 2) & 0b11] = *(++values);
+			//outValues[nodesChangins >> 4] = *(++values);
+
+			outValues[nodesChangins & 0b11] = values[0];
+			outValues[(nodesChangins >> 2) & 0b11] = values[1];
+			outValues[nodesChangins >> 4] = values[2];
+
+			//outValues[0] = values[nodesChangins & 0b11];
+			//outValues[1] = values[(nodesChangins >> 2) & 0b11];
+			//outValues[2] = values[nodesChangins >> 4];
 		}
 
 		void Gauss<2>::changeValuesOrder(double values[], const uint8_t nFunctions, const uint8_t nodesChangins)
@@ -128,10 +140,14 @@ namespace NumericalIntegration
 			{
 				changeValuesOrder(values, nodesChangins, outValues);
 
-				*values = outValues[0];
-				*(++values) = outValues[1];
-				*(++values) = outValues[2];
-				++values;
+				values[0] = outValues[0];
+				values[1] = outValues[1];
+				values[2] = outValues[2];
+				values += 3;
+				//*values = outValues[0];
+				//*(++values) = outValues[1];
+				//*(++values) = outValues[2];
+				//++values;
 			}
 
 		}

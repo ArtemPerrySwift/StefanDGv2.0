@@ -12,6 +12,7 @@ namespace CoordinatesFunctions
 	void computeTransitionMatrix2DExcludeY(const Coordinates nodes[], const size_t* triangleNodeIndexIt, double transitionMatrix[4]);
 	void computeTransitionMatrix2DExcludeZ(const Coordinates nodes[], const size_t* triangleNodeIndexIt, double transitionMatrix[4]);
 
+	void translate(const LocalCoordinates3D& localCoordinates, const Coordinates& basePoint, const double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], Coordinates& point);
 	void translatePointCoordinatesToLocal(const Coordinates &basePoint,
 									      const Coordinates &point,
 										  const double transitionMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
@@ -52,9 +53,13 @@ namespace CoordinatesFunctions
 
 	void computeNormal(const double transpJacobianMatrix[LocalCoordinates2D::COUNT * Coordinates::COUNT], Coordinates& normal);
 
+	double computeJacobianMatrix(const Coordinates* tetrahedronNodeIt, double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT]);
 	double computeTranspJacobianMatrix(const Coordinates* tetrahedronNodeIt, double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT]);
 	double computeTranspJacobianMatrix(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT]);
 	double computeTranspJacobianMatrix(const Coordinates* tetrahedronNodeBeginIt, double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT]);
+
+	double computeJacobianMatrix(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double jacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT]);
+	void computeTranspLocalJacobianMatrix(const double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], const double determinant, double transpLocalJacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT]);
 
 	void computeLocalJacobianMatrix(const double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
 		const double determinant,

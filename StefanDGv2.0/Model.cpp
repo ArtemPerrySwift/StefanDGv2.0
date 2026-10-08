@@ -271,12 +271,12 @@ bool getConditions(const unsigned int *nameStartIndexIt,
         }
         case 'C':
         {
-            ++nameSymbolIt;
-            if (*nameSymbolIt != '_')
-            {
-                isNameError = true;
-                break;
-            }
+            //++nameSymbolIt;
+            //if (*nameSymbolIt != '_')
+            //{
+            //   isNameError = true;
+            //    break;
+            //}
 
             ++iNonconformInterafce;
             *conditionPtrIt = &Boundary::NonconformInterfaceCondition;
@@ -317,7 +317,7 @@ bool getConditions(const unsigned int *nameStartIndexIt,
 
         if (isNameError)
         {
-            conditionPtrIt = nullptr;
+            *conditionPtrIt = nullptr;
             printf("Error: Invalid condition name ");
             nameSymbolIt = name;
             while (nameSymbolIt != nameEnd)
@@ -634,7 +634,7 @@ Model::Error Model::initilizeByCurrentGMSHModel()
     const MaterialPhase** regionsMaterialPhases = (const MaterialPhase**)malloc(nRegions * sizeof(MaterialPhase*));
     int* regionsTags = (int*)malloc(nRegions * sizeof(int));
 
-    void* regionsMemoryPull = malloc(((nRegions + 1) << 1) * sizeof(int));
+    void* regionsMemoryPull = malloc((2 * (nRegions + 1)) * sizeof(int));
     unsigned int* regionsBoundariesStartIndexes = (unsigned int*)(regionsMemoryPull);
     unsigned int* regionsPGsStartIndexes = regionsBoundariesStartIndexes + nRegions + 1;
 

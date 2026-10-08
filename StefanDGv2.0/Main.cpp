@@ -59,69 +59,60 @@ static uint8_t readParameter(const char parameterName[], const char parameterFil
 	return 0;
 }
 
-static void test()
+static uint8_t test()
 {
-	gmsh::open(gmshInitialModelFileName);
+	double penalty;
+	uint8_t err = readParameter("Penalty", "Penalty.txt", &penalty);
+	if (err)
+	{
+		return err;
+	}
 
-	gmsh::model::mesh::generate();
+	gmsh::initialize();
+	//gmsh::open("./Models/two_elements_occ.geo");
+	//gmsh::open("./Models/box_occ.geo");
+	gmsh::open("./Models/two_elements_nonconformal.geo");
+	
 
-	DG::Solution sol;
-	const unsigned int nRegions = 4;
-	const unsigned int nBoundaries = 23;
-	const unsigned int nNonconformInterfaces = 2;
-	size_t memoryBufferSize = (3 * (nRegions + 1) + nBoundaries + 1) * sizeof(size_t) +
-		2 * nRegions * sizeof(double*) +
-		nNonconformInterfaces * (sizeof(unsigned int*) +  sizeof(unsigned int) + sizeof(double*));
-	size_t* modelMemoryBuffer = (size_t*)malloc((3 * (nRegions + 1) + nBoundaries + 1) * sizeof(size_t) +
-		2 * nRegions * sizeof(double*) +
-		nNonconformInterfaces * (sizeof(unsigned int*) + sizeof(unsigned int) + sizeof(double*)) + 100);
+	Model model;
+	if (model.initilizeByCurrentGMSHModel() != Model::Error::NO_ERRORS)
+	{
+		gmsh::finalize();
+		return 1;
+	}
+
+	size_t* modelMemoryBuffer = (size_t*)malloc((3 * (model.nRegions + 1) + model.nBoundaries + 1) * sizeof(size_t) +
+		2 * model.nRegions * sizeof(double*) +
+		model.nNonconformInterfaces * sizeof(unsigned int*) +
+		model.nNonconformInterfaces * sizeof(unsigned int) +
+		model.nNonconformInterfaces * sizeof(double*));
 
 	double* calculationBuffer = (double*)malloc(1024 * sizeof(double));
 
-	/*DG::StefanTask::solveInitialIteration(nRegions,
-		nullptr,
-		nullptr,
-		nBoundaries,
-		nullptr,
-		nNonconformInterfaces,
-		1.0,
+	DG::StefanTask::initSolver();
+	gmsh::model::mesh::generate();
+
+	DG::Solution solution;
+	DG::StefanTask::solveInitialIteration(model.nRegions,
+		model.regionsMaterialPhases,
+		model.boundaries,
+		model.nBoundaries,
+		model.nonconformInterfaces,
+		model.nNonconformInterfaces,
 		0.0,
+		1.0,
+		penalty,
 		calculationBuffer,
 		modelMemoryBuffer,
-		&sol);*/
+		&solution);
 
-	/*size_t* regionsStartTetrahedronsIndexes = (size_t*)modelMemoryBuffer;
-	size_t* surfacesFacesStartIndexes = regionsStartTetrahedronsIndexes + nRegions + 1;
-	size_t* regionsStartTetrahedronsTags = surfacesFacesStartIndexes + nBoundaries + 1;
-	size_t* regionsInteriorFacesStartIndexes = regionsStartTetrahedronsTags + nRegions + 1;*/
-
-	size_t regionsStartTetrahedronsIndexes[nRegions + 1];
-	size_t surfacesFacesStartIndexes[nBoundaries + 1];
-	size_t regionsStartTetrahedronsTags[nRegions + 1];
-	size_t regionsInteriorFacesStartIndexes[nRegions + 1];
-
-	size_t nNodes = gmsh::model::mesh::getNodesCount();
-	Coordinates* nodes = (Coordinates*)malloc((nNodes + 1) * sizeof(Coordinates));
-	gmsh::model::mesh::getNodes((double(*)[3])nodes);
-
-	gmsh::model::mesh::getSurfacesTrianglesStartIndexes(surfacesFacesStartIndexes);
-	gmsh::model::mesh::getRegionsTetrahedronsStartIndexes(regionsStartTetrahedronsIndexes);
-	size_t nTetrahedrons = regionsStartTetrahedronsIndexes[nRegions];
-	size_t tetFecasBufferSize = nTetrahedrons * constants::tetrahedron::N_FACES + surfacesFacesStartIndexes[nBoundaries];
-	size_t* tetFacesIndexes = (size_t*)malloc(tetFecasBufferSize * sizeof(size_t));
-	size_t* tetBaseFacesIndexes = tetFacesIndexes;
-	size_t* tetNeigbourFacesIndexes = tetFacesIndexes + tetFecasBufferSize / 2;
-
-	size_t nTetNodes = nTetrahedrons * constants::tetrahedron::N_NODES;
-	size_t* tetNodesTag = (size_t*)malloc(nTetNodes * sizeof(size_t));
-
-	gmsh::model::mesh::getTetrahedrons(tetNodesTag);
-	gmsh::model::mesh::getTetrahedrons(regionsStartTetrahedronsTags, tetNodesTag, regionsInteriorFacesStartIndexes, tetBaseFacesIndexes, tetNeigbourFacesIndexes);
-
+	solution.clear();
 }
 
 int main()
 {
+	test();
+	return 0;
 	double tMin, tMax;
 	size_t nTSteps;
 

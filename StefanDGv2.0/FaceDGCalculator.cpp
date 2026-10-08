@@ -266,6 +266,7 @@ namespace DG
 				computeCrossMassMatrix(*iFaceValuesIt, *jFaceValuesIt, *ijMassMatrixIt, *jiMassMatrixIt);
 			}
 
+			++iFaceValuesIt;
 			iiMassMatrixPtr += constants::tetrahedron::N_FACES + 1;
 			++massMetrixIt;
 		}

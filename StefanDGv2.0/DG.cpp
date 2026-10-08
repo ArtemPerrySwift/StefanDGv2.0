@@ -11,6 +11,23 @@
 #include <Eigen/IterativeLinearSolvers>
 #include <gmsh.h>
 #include <set>
+#include <iostream>
+
+template<uint8_t MATRIX_SIZE>
+static void printMatrix(const double* matrixElementsIt)
+{
+    for (uint8_t i = 0; i < MATRIX_SIZE; ++i)
+    {
+        printf("%lf", *matrixElementsIt);
+        ++matrixElementsIt;
+        for (uint8_t j = 1; j < MATRIX_SIZE; ++j)
+        {
+            printf(" %lf", *matrixElementsIt);
+            ++matrixElementsIt;
+        }
+        printf("\n");
+    }
+}
 
 namespace DG
 {
@@ -26,13 +43,15 @@ namespace DG
         template<>
         inline static double initialCondition<MaterialPhase::SOLID>(const Coordinates& point)
         {
-            return 273.15 - point.x * 2;
+            //return 273.15 - point.x * 2;
+            return point.x;
         }
 
         template<>
         inline static double initialCondition<MaterialPhase::LIQUID>(const Coordinates& point)
         {
-            return 293.15 - (point.x + 1)*20;
+            //return 293.15 - (point.x + 1)*20;
+            return point.x;
         }
 
         template<MaterialPhase::State>
@@ -57,8 +76,9 @@ namespace DG
         {
             return 0.0;
         }
+
         static double computeErrors(const LocalCoordinates3D* localPointIt,
-                                    const double transpJacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                    const double jacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                     const Coordinates tetrahedronStartPoint,
                                     const double* tetrahedronDOFs,
                                     const double t,
@@ -67,19 +87,7 @@ namespace DG
             Coordinates point;
             for (uint8_t i = 0; i < NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps; ++i)
             {
-                point = tetrahedronStartPoint;
-                point.x += transpJacobian[0] * localPointIt->u;
-                point.y += transpJacobian[1] * localPointIt->u;
-                point.z += transpJacobian[2] * localPointIt->u;
-
-                point.x += transpJacobian[3] * localPointIt->v;
-                point.y += transpJacobian[4] * localPointIt->v;
-                point.z += transpJacobian[5] * localPointIt->v;
-
-                point.x += transpJacobian[6] * localPointIt->w;
-                point.y += transpJacobian[7] * localPointIt->w;
-                point.z += transpJacobian[8] * localPointIt->w;
-
+                CoordinatesFunctions::translate(*localPointIt, tetrahedronStartPoint, jacobian, point);
                 *errorIt = abs(analyticalSolution(point, t) - LinearLagrangeBasis::compute(*localPointIt, tetrahedronDOFs));
                 ++errorIt;
                 ++localPointIt;
@@ -93,14 +101,14 @@ namespace DG
                                          const size_t(*tetrahedronNodesIndexesIt)[constants::tetrahedron::N_NODES],
                                          double t)
         {
-            double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
+            double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
             double errors[NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps];
             double volume = 0.0;
             double error = 0.0;
             for (size_t i = 0; i < nTetrahedrons; ++i)
             {
-                double det = CoordinatesFunctions::computeTranspJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, transpJacobianMatrix);
-                computeErrors(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, transpJacobianMatrix, nodes[**tetrahedronNodesIndexesIt], *DOFs, t, errors);
+                double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
+                computeErrors(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, jacobianMatrix, nodes[**tetrahedronNodesIndexesIt], *DOFs, t, errors);
                 error += NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
                 volume += det;
 
@@ -114,26 +122,14 @@ namespace DG
 
         template<MaterialPhase::State state>
         static void computeInitialCondition(const LocalCoordinates3D *localPointIt,
-                                            const double transpJacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                            const double jacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                             const Coordinates tetrahedronStartPoint,
                                             double* initlialConditionValueIt)
         {
             Coordinates point;
             for (uint8_t i = 0; i < NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps; ++i)
             {
-                point = tetrahedronStartPoint;
-                point.x += transpJacobian[0] * localPointIt->u;
-                point.y += transpJacobian[1] * localPointIt->u;
-                point.z += transpJacobian[2] * localPointIt->u;
-
-                point.x += transpJacobian[3] * localPointIt->v;
-                point.y += transpJacobian[4] * localPointIt->v;
-                point.z += transpJacobian[5] * localPointIt->v;
-
-                point.x += transpJacobian[6] * localPointIt->w;
-                point.y += transpJacobian[7] * localPointIt->w;
-                point.z += transpJacobian[8] * localPointIt->w;
-
+                CoordinatesFunctions::translate(*localPointIt, tetrahedronStartPoint, jacobian, point);
                 *initlialConditionValueIt = initialCondition<state>(point);
                 ++initlialConditionValueIt;
                 ++localPointIt;
@@ -149,7 +145,8 @@ namespace DG
         template<>
         inline static double computeBoundaryCondition<Boundary::FunctionCondition::Type::DIRICHLET>(const Coordinates& point)
         {
-            return 0.0;
+            //return 0.0;
+            return point.x;
         }
 
         template<>
@@ -247,7 +244,7 @@ namespace DG
                 *linearAdjusmentIt = multiplier * (*trackPowerVectorElementIt);
                 for (uint8_t j = 0; j < N_FUNCTIONS; ++j)
                 {
-                    *bilinearAdjusmentIt = determinant * (*massMatrixElementIt - *stiffnessMatrixElementIt);
+                    *bilinearAdjusmentIt = determinant * (gamma*(*massMatrixElementIt) + lambda*(*stiffnessMatrixElementIt));
 
                     ++massMatrixElementIt;
                     ++stiffnessMatrixElementIt;
@@ -267,7 +264,7 @@ namespace DG
                                  const double lambda,
                                  const double gamma,
                                  void* calculationMemoryBuffer,
-                                 double(*localJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                 double(*transptranspLocalJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                  double (*initialXIt)[Basis::N_FUNCTIONS],
                                  double (*bilinearTetrahedronsAdjusmentsIt)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                  double (*linearTetrahedronsAdjusmentsIt)[Basis::N_FUNCTIONS])
@@ -282,17 +279,17 @@ namespace DG
             Coordinates* gradients = (Coordinates*)(initlialConditionValues + NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps);
 
             const LLt* massSLAESolverPtr = ElementLAC<Basis>::getMassSLAESolverPtr();
-            double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
+            double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
 
             for (size_t i = 0; i < nTetrahedrons; ++i)
             {
-                double det = CoordinatesFunctions::computeTranspJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, transpJacobianMatrix);
-                CoordinatesFunctions::computeLocalJacobianMatrix(transpJacobianMatrix, det, *localJacobianMatrixIt);
+                double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
+                CoordinatesFunctions::computeTranspLocalJacobianMatrix(jacobianMatrix, det, *transptranspLocalJacobianMatrixIt);
 
-                CoordinatesFunctions::translate(*localJacobianMatrixIt, localGradients, Basis::N_FUNCTIONS * NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps, gradients);
+                CoordinatesFunctions::translate(*transptranspLocalJacobianMatrixIt, localGradients, Basis::N_FUNCTIONS * NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps, gradients);
                 ElementLAC<Basis>::computeStiffnessMatrix(gradients, stiffnessMatrix);
 
-                computeInitialCondition<MATERIAL_STATE>(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, transpJacobianMatrix, nodes[**tetrahedronNodesIndexesIt], initlialConditionValues);
+                computeInitialCondition<MATERIAL_STATE>(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, jacobianMatrix, nodes[**tetrahedronNodesIndexesIt], initlialConditionValues);
 
                 ElementLAC<Basis>::computePowerVector(initlialConditionValues, localVector);
                 massSLAESolverPtr->solve(localVector, *initialXIt);
@@ -307,7 +304,7 @@ namespace DG
                     *linearTetrahedronsAdjusmentsIt);
 
                 ++initialXIt;
-                ++localJacobianMatrixIt;
+                ++transptranspLocalJacobianMatrixIt;
 
                 ++bilinearTetrahedronsAdjusmentsIt;
                 ++linearTetrahedronsAdjusmentsIt;
@@ -320,7 +317,7 @@ namespace DG
         const uint8_t ELEMENTS_TAGS_BUFFER_MAX_SIZE = 10;
         void computePreviousSolutionValues(const Solution& previousSolution,
                                            const LocalCoordinates3D* localPointIt,
-                                           const double transpJacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                           const double jacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                            const Coordinates tetrahedronStartPoint,
                                            double bufferTranspJacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                            size_t elementsTagsBuffer[ELEMENTS_TAGS_BUFFER_MAX_SIZE],
@@ -341,18 +338,8 @@ namespace DG
 
             for (uint8_t i = 0; i < NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps; ++i)
             {
+                CoordinatesFunctions::translate(*localPointIt, tetrahedronStartPoint, jacobian, point);
                 point = tetrahedronStartPoint;
-                point.x += transpJacobian[0] * localPointIt->u;
-                point.y += transpJacobian[1] * localPointIt->u;
-                point.z += transpJacobian[2] * localPointIt->u;
-
-                point.x += transpJacobian[3] * localPointIt->v;
-                point.y += transpJacobian[4] * localPointIt->v;
-                point.z += transpJacobian[5] * localPointIt->v;
-
-                point.x += transpJacobian[6] * localPointIt->w;
-                point.y += transpJacobian[7] * localPointIt->w;
-                point.z += transpJacobian[8] * localPointIt->w;
 
                 if (gmsh::model::mesh::get3DElementsByCoordinates(point.x, point.y, point.z, nElementsMax, elementsTags, &nElements))
                 {
@@ -369,8 +356,8 @@ namespace DG
                 if (*elementsTags != previousSolutionElementTag)
                 {
                     gmsh::model::mesh::get3DElement(elementsTags[i], (double*)tetrahedronNodes, &entityTag);
-                    double det = CoordinatesFunctions::computeTranspJacobianMatrix(tetrahedronNodes, transpJacobianMatrixPrev);
-                    CoordinatesFunctions::computeLocalJacobianMatrix(transpJacobianMatrixPrev, det, bufferTranspJacobian);
+                    double det = CoordinatesFunctions::computeJacobianMatrix(tetrahedronNodes, transpJacobianMatrixPrev);
+                    CoordinatesFunctions::computeTranspLocalJacobianMatrix(transpJacobianMatrixPrev, det, bufferTranspJacobian);
                     previousSolutionElementTag = *elementsTags;
                 }
 
@@ -385,8 +372,8 @@ namespace DG
                 for (uint8_t i = 1; i < nElements; ++i)
                 {
                     gmsh::model::mesh::get3DElement(elementsTags[i], (double*)tetrahedronNodes, &entityTag);
-                    double det = CoordinatesFunctions::computeTranspJacobianMatrix(tetrahedronNodes, transpJacobianMatrixPrev);
-                    CoordinatesFunctions::computeLocalJacobianMatrix(transpJacobianMatrixPrev, det, bufferTranspJacobian);
+                    double det = CoordinatesFunctions::computeJacobianMatrix(tetrahedronNodes, transpJacobianMatrixPrev);
+                    CoordinatesFunctions::computeTranspLocalJacobianMatrix(transpJacobianMatrixPrev, det, bufferTranspJacobian);
                     
                     Coordinates* basePoint = tetrahedronNodes;
                     Coordinates pointsDiff = { point.x - basePoint->x, point.y - basePoint->y, point.z - basePoint->z };
@@ -420,7 +407,7 @@ namespace DG
                                  const double gamma,
                                  const Solution &solution,
                                  void* calculationMemoryBuffer,
-                                 double(*localJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                 double(*transptranspLocalJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                  double (*initialXIt)[Basis::N_FUNCTIONS],
                                  double (*bilinearTetrahedronsAdjusmentsIt)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                  double (*linearTetrahedronsAdjusmentsIt)[Basis::N_FUNCTIONS])
@@ -435,22 +422,22 @@ namespace DG
             Coordinates* gradients = (Coordinates*)(initlialConditionValues + NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps);
 
             const LLt* massSLAESolverPtr = ElementLAC<Basis>::getMassSLAESolverPtr();
-            double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
+            double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
             double bufferTranspJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
             size_t elementTagsBuffer[ELEMENTS_TAGS_BUFFER_MAX_SIZE];
             *elementTagsBuffer = ~size_t(0);
 
             for (size_t i = 0; i < nTetrahedrons; ++i)
             {
-                double det = CoordinatesFunctions::computeTranspJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, transpJacobianMatrix);
-                CoordinatesFunctions::computeLocalJacobianMatrix(transpJacobianMatrix, det, *localJacobianMatrixIt);
+                double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
+                CoordinatesFunctions::computeTranspLocalJacobianMatrix(jacobianMatrix, det, *transptranspLocalJacobianMatrixIt);
 
-                CoordinatesFunctions::translate(*localJacobianMatrixIt, localGradients, Basis::N_FUNCTIONS * NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps, gradients);
+                CoordinatesFunctions::translate(*transptranspLocalJacobianMatrixIt, localGradients, Basis::N_FUNCTIONS * NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps, gradients);
                 ElementLAC<Basis>::computeStiffnessMatrix(gradients, stiffnessMatrix);
 
                 computePreviousSolutionValues(solution,
                                               NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints,
-                                              transpJacobianMatrix,
+                                              jacobianMatrix,
                                               nodes[**tetrahedronNodesIndexesIt],
                                               bufferTranspJacobianMatrix,
                                               elementTagsBuffer,
@@ -469,7 +456,7 @@ namespace DG
                                                                  *linearTetrahedronsAdjusmentsIt);
 
                 ++initialXIt;
-                ++localJacobianMatrixIt;
+                ++transptranspLocalJacobianMatrixIt;
 
                 ++bilinearTetrahedronsAdjusmentsIt;
                 ++linearTetrahedronsAdjusmentsIt;
@@ -480,24 +467,44 @@ namespace DG
         }
 
         template<size_t N_FUNCTIONS>
-        static void addInteriorFaceAdjusmets(const double* flowMatrixElementIt, const double* massMatrixElementIt, const double penaltyCoeff, const double detLambdaCoeff, double* adjusmentIt)
+        static void addInteriorFaceAdjusments(const double* flowMatrixElementIt, const double* massMatrixElementIt, const double penaltyCoeff, const double detLambdaCoeff, double* adjusmentIt)
         {
+            //double adj[4][4] = { 0 };
+            double* ijAdjusmentPtr;
+            double* jiAdjusmentPtr;
+            //adjusmentIt = *adj;
             for (uint8_t i = 0; i < N_FUNCTIONS; ++i)
             {
-                *adjusmentIt = detLambdaCoeff * (*flowMatrixElementIt - penaltyCoeff * (*massMatrixElementIt));
+                massMatrixElementIt += i;
+                *adjusmentIt += detLambdaCoeff * (-(*flowMatrixElementIt) + penaltyCoeff * (*massMatrixElementIt));
+
+                ijAdjusmentPtr = adjusmentIt;
+                jiAdjusmentPtr = adjusmentIt;
+
                 const double* ijFlowMatrixElementPtr = flowMatrixElementIt;
                 const double* jiFlowMatrixElementPtr = flowMatrixElementIt;
                 for (uint8_t j = i + 1; j < N_FUNCTIONS; ++j)
                 {
                     ++massMatrixElementIt;
+
+                    ++ijAdjusmentPtr;
+                    jiAdjusmentPtr += N_FUNCTIONS;
+
                     ++ijFlowMatrixElementPtr;
                     jiFlowMatrixElementPtr += N_FUNCTIONS;
 
-                    *adjusmentIt += detLambdaCoeff * ((*ijFlowMatrixElementPtr + *jiFlowMatrixElementPtr) / 2.0 - penaltyCoeff * (*massMatrixElementIt));
+                    double adjuement = detLambdaCoeff * (-(*ijFlowMatrixElementPtr + *jiFlowMatrixElementPtr) / 2.0 + penaltyCoeff * (*massMatrixElementIt));
+                    *ijAdjusmentPtr += adjuement;
+                    *jiAdjusmentPtr += adjuement;
                 }
 
+                ++massMatrixElementIt;
                 flowMatrixElementIt += N_FUNCTIONS + 1;
+                adjusmentIt += N_FUNCTIONS + 1;
             }
+
+            //printf("Interior Face element Matrix\n");
+            //printMatrix<Basis::N_FUNCTIONS>(*adj);
         }
 
         template<size_t N_FUNCTIONS>
@@ -508,22 +515,31 @@ namespace DG
             const double detLambdaCoeff,
             double* adjusmentIt)
         {
+            //printf("Croos Flow Matrix 1\n");
+            //printMatrix<Basis::N_FUNCTIONS>(crossFlowMatrix1ElementIt);
+
+            //printf("Croos Flow Matrix 2\n");
+            //printMatrix<Basis::N_FUNCTIONS>(crossFlowMatrix2ElementIt);
+
+            double* adj = adjusmentIt;
             for (uint8_t i = 0; i < N_FUNCTIONS; ++i)
             {
-                *adjusmentIt = detLambdaCoeff * ((*crossFlowMatrix1ElementIt + *crossFlowMatrix2ElementIt) / 2.0 - penaltyCoeff * (*massMatrixElementIt));
                 const double* jiFlowMatrix2ElementPtr = crossFlowMatrix2ElementIt;
                 for (uint8_t j = 0; j < N_FUNCTIONS; ++j)
                 {
+                    *adjusmentIt = detLambdaCoeff * ((*crossFlowMatrix1ElementIt + *jiFlowMatrix2ElementPtr) / 2.0 - penaltyCoeff * (*massMatrixElementIt));
+
+                    ++adjusmentIt;
                     ++massMatrixElementIt;
                     ++crossFlowMatrix1ElementIt;
                     jiFlowMatrix2ElementPtr += N_FUNCTIONS;
-
-                    *adjusmentIt = detLambdaCoeff * ((*crossFlowMatrix1ElementIt + *jiFlowMatrix2ElementPtr) / 2.0 - penaltyCoeff * (*massMatrixElementIt));
-                    ++adjusmentIt;
                 }
 
                 ++crossFlowMatrix2ElementIt;
             }
+
+            //printf("Interior Face Matrix\n");
+            //printMatrix<Basis::N_FUNCTIONS>(adj);
         }
 
         template<size_t N_FUNCTIONS>
@@ -536,15 +552,15 @@ namespace DG
         {
             for (uint8_t i = 0; i < N_FUNCTIONS; ++i)
             {
-                *adjusmentIt += detLambdaCoeff * ((*crossFlowMatrix1ElementIt + *crossFlowMatrix2ElementIt) / 2.0 - penaltyCoeff * (*massMatrixElementIt));
                 const double* jiFlowMatrix2ElementPtr = crossFlowMatrix2ElementIt;
                 for (uint8_t j = 0; j < N_FUNCTIONS; ++j)
                 {
+                    *adjusmentIt += detLambdaCoeff * ((*crossFlowMatrix1ElementIt + *jiFlowMatrix2ElementPtr) / 2.0 - penaltyCoeff * (*massMatrixElementIt));
+
                     ++massMatrixElementIt;
                     ++crossFlowMatrix1ElementIt;
                     jiFlowMatrix2ElementPtr += N_FUNCTIONS;
-
-                    *adjusmentIt += detLambdaCoeff * ((*crossFlowMatrix1ElementIt + *jiFlowMatrix2ElementPtr) / 2.0 - penaltyCoeff * (*massMatrixElementIt));
+                    ++adjusmentIt;
                 }
 
                 ++crossFlowMatrix2ElementIt;
@@ -575,7 +591,7 @@ namespace DG
                                                const double commonMultiplier,
                                                const double penalty,
                                                const Coordinates& unitNormal,
-                                               const double localJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                               const double transpLocalJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                Coordinates gradients[FaceLAC<Basis>::N_BASIS_VALUES],
                                                double flowMatrix[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                double normalDerivatives[FaceLAC<Basis>::N_BASIS_VALUES],
@@ -583,12 +599,13 @@ namespace DG
         {
             double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(transpMatrixies_[iTriangle], determinant)*/;
 
-            CoordinatesFunctions::translate(localJacobianMatrix, FaceLAC<Basis>::getLocalGradientsByFace()[localIndex], FaceLAC<Basis>::N_BASIS_VALUES, gradients);
+            CoordinatesFunctions::translate(transpLocalJacobianMatrix, FaceLAC<Basis>::getLocalGradientsByFace()[localIndex], FaceLAC<Basis>::N_BASIS_VALUES, gradients);
 
             CoordinatesFunctions::coomputeDirectionalDerivative(gradients, FaceLAC<Basis>::N_BASIS_VALUES, unitNormal, normalDerivatives);
 
-            computeBilinearMatrixOnTriangle(FaceLAC<Basis>::getValuesByFace()[localIndex], normalDerivatives, flowMatrix);
-            addInteriorFaceAdjusmets<Basis::N_FUNCTIONS>(flowMatrix, FaceLAC<Basis>::getMassMatrixies()[localIndex], facePenalty, commonMultiplier, bilinearAdjusments);
+            FaceLAC<Basis>::computeFlowMatrix(localIndex, normalDerivatives, flowMatrix);
+            //computeBilinearMatrixOnTriangle(FaceLAC<Basis>::getValuesByFace()[localIndex], normalDerivatives, flowMatrix);
+            addInteriorFaceAdjusments<Basis::N_FUNCTIONS>(flowMatrix, FaceLAC<Basis>::getMassMatrixies()[localIndex], facePenalty, commonMultiplier, bilinearAdjusments);
         }
 
         static void extractFaceNodesTags(const uint8_t localIndex,
@@ -730,7 +747,7 @@ namespace DG
                                          const Coordinates nodes[],
                                          const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
                                          void *calculationBuffer,
-                                         double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                         double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                          double (*crossAdjusmentsIt)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                          double bilinearTetrahedronsAdjusmentsSide1[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                          double bilinearTetrahedronsAdjusmentsSide2[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])
@@ -773,7 +790,7 @@ namespace DG
                                           commonMultiplier,
                                           penalty,
                                           normal,
-                                          localJacobianMatrix[elementIndex],
+                                          transpLocalJacobianMatrix[elementIndex],
                                           gradients,
                                           flowMatrix,
                                           normalDerivatives,
@@ -784,7 +801,7 @@ namespace DG
                 ++faceIndexesSide2It;
 
                 extractFaceNodesTags(localIndex1, tetrahedronsNodesTags[elementIndex], facesNodes[1]);
-                uint8_t changingIndexes = computeChangingIndexes(facesNodes[1], facesNodes[0]);
+                uint8_t changingIndexes = computeChangingIndexes(facesNodes[0], facesNodes[1]);
                 if (changingIndexes != 0)
                 {
                     NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(normalDerivatives, Basis::N_FUNCTIONS, changingIndexes);
@@ -800,13 +817,13 @@ namespace DG
                                           commonMultiplier,
                                           penalty,
                                           normal,
-                                          localJacobianMatrix[elementIndex],
+                                          transpLocalJacobianMatrix[elementIndex],
                                           gradients,
                                           flowMatrix,
                                           normalDerivatives,
                                           bilinearTetrahedronsAdjusmentsSide2[elementIndex]);
 
-                changingIndexes = computeChangingIndexes(facesNodes[0], facesNodes[1]);
+                changingIndexes = computeChangingIndexes(facesNodes[1], facesNodes[0]);
                 if (changingIndexes != 0)
                 {
                     NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::changeValuesOrder(normalDerivatives, Basis::N_FUNCTIONS, changingIndexes);
@@ -869,7 +886,7 @@ namespace DG
                                                  const Coordinates nodes[],
                                                  const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
                                                  void* calculationBuffer,
-                                                 double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                 double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                  double (*crossAdjusmentsIt)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                  double bilinearTetrahedronsAdjusmentsSide1[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                  double bilinearTetrahedronsAdjusmentsSide2[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])
@@ -925,7 +942,7 @@ namespace DG
                     commonMultiplier,
                     penalty,
                     unitNormal,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     gradients,
                     flowMatrix,
                     normalDerivatives,
@@ -949,7 +966,7 @@ namespace DG
                     commonMultiplier,
                     penalty,
                     reverseUnitNormal,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     gradients,
                     flowMatrix,
                     normalDerivatives,
@@ -1014,7 +1031,7 @@ namespace DG
         static void addInteriorFaceFragmentAdjusments(const double commonMultiplier,
                                                       const double penalty,
                                                       const Coordinates& unitNormal,
-                                                      const double localJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                      const double transpLocalJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                       const double basisValues[],
                                                       const LocalCoordinates3D localGradients[],
                                                       Coordinates gradients[FaceLAC<Basis>::N_BASIS_VALUES],
@@ -1025,14 +1042,14 @@ namespace DG
         {
             double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(transpMatrixies_[iTriangle], determinant)*/;
 
-            CoordinatesFunctions::translate(localJacobianMatrix, localGradients, FaceLAC<Basis>::N_BASIS_VALUES, gradients);
+            CoordinatesFunctions::translate(transpLocalJacobianMatrix, localGradients, FaceLAC<Basis>::N_BASIS_VALUES, gradients);
 
             CoordinatesFunctions::coomputeDirectionalDerivative(gradients, FaceLAC<Basis>::N_BASIS_VALUES, unitNormal, normalDerivatives);
 
             computeBilinearMatrixOnTriangle(basisValues, basisValues, massMatrix);
             computeBilinearMatrixOnTriangle(basisValues, normalDerivatives, flowMatrix);
 
-            addInteriorFaceAdjusmets<Basis::N_FUNCTIONS>(flowMatrix, massMatrix, facePenalty, commonMultiplier, bilinearAdjusments);
+            addInteriorFaceAdjusments<Basis::N_FUNCTIONS>(flowMatrix, massMatrix, facePenalty, commonMultiplier, bilinearAdjusments);
         }
 
 
@@ -1049,7 +1066,7 @@ namespace DG
                                                       const double lambda,
                                                       const double penalty,
                                                       void* calculationBuffer,
-                                                      double localJacobianMatrixes[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                      double transpLocalJacobianMatrixes[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                       double (*crossAdjusmentsIt)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                       double bilinearTetrahedronsAdjusmentsSide1[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                       double bilinearTetrahedronsAdjusmentsSide2[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])
@@ -1131,22 +1148,9 @@ namespace DG
                 ++fragmentsTrianglesStartIndexIt;
                 const size_t triangleEndIndex = *fragmentsTrianglesStartIndexIt;
 
+                faceIndex = faceIndexesSide1[*fragmentFaceSurfaceIndexSide1It];
                 for (uint8_t i = 0; i < 2; ++i)
                 {
-                    const size_t* sideFaceIndexes = faceIndexesSide1;
-                    const unsigned int* faceSurfaceIndex = fragmentFaceSurfaceIndexSide1It;
-                    if (i == 0)
-                    {
-                        sideFaceIndexes = faceIndexesSide1;
-                        faceSurfaceIndex = fragmentFaceSurfaceIndexSide1It;
-                    }
-                    else
-                    {
-                        sideFaceIndexes = faceIndexesSide2;
-                        faceSurfaceIndex = fragmentFaceSurfaceIndexSide2It;
-                    }
-                    faceIndex = sideFaceIndexes[*faceSurfaceIndex];
-
                     if (elementsIndexes[i] != (faceIndex >> 2))
                     {
                         elementsIndexes[i] = faceIndex >> 2;
@@ -1154,10 +1158,11 @@ namespace DG
 
                         extractFaceNodesTags(localIndexes[i], tetrahedronsNodesTags[elementsIndexes[i]], faceNodes[i]);
                         computeTransitionMatrix2D(nodes, faceNodes[i], translMatrix[i]);
-                        facesBasePoints[i] = nodes[tetrahedronsNodesTags[elementsIndexes[i]][0]];
+                        facesBasePoints[i] = nodes[faceNodes[i][0]];
                     }
 
                     memset(sidesBilinearAdjusments[i], 0, ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS * sizeof(double));
+                    faceIndex = faceIndexesSide2[*fragmentFaceSurfaceIndexSide2It];
                 }
 
                 memset(crossMatrix, 0, ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS * sizeof(double));
@@ -1214,13 +1219,13 @@ namespace DG
                         }
 
 
-                        CoordinatesFunctions::translate(localJacobianMatrixes[elementsIndexes[i]], localGradients, FaceLAC<Basis>::N_BASIS_VALUES, gradients);
+                        CoordinatesFunctions::translate(transpLocalJacobianMatrixes[elementsIndexes[i]], localGradients, FaceLAC<Basis>::N_BASIS_VALUES, gradients);
                         CoordinatesFunctions::coomputeDirectionalDerivative(gradients, FaceLAC<Basis>::N_BASIS_VALUES, unitNormals[i], normalDerivatives[i]);
 
                         computeBilinearMatrixOnTriangle(basisValues[i], basisValues[i], massMatrix);
                         computeBilinearMatrixOnTriangle(basisValues[i], normalDerivatives[i], flowMatrix);
 
-                        addInteriorFaceAdjusmets<Basis::N_FUNCTIONS>(flowMatrix, massMatrix, penalty, commonMultiplier, sidesBilinearAdjusments[i]);
+                        addInteriorFaceAdjusments<Basis::N_FUNCTIONS>(flowMatrix, massMatrix, penalty, commonMultiplier, sidesBilinearAdjusments[i]);
                     }
 
                     computeBilinearMatrixOnTriangle(basisValues[1], normalDerivatives[0], crossFlowMatrixes[0]);
@@ -1244,11 +1249,11 @@ namespace DG
                 double* side1GlobalBilinearAdjusments = bilinearTetrahedronsAdjusmentsSide2[elementsIndexes[1]];
                 double* crossGlobalAdjusments = *crossAdjusmentsIt;
 
-                for (uint8_t i = 0; i < FaceLAC<Basis>::N_BASIS_VALUES; ++i)
+                for (uint8_t i = 0; i < FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS; ++i)
                 {
                     side0GlobalBilinearAdjusments[i] += side0BilinearAdjusments[i];
                     side1GlobalBilinearAdjusments[i] += side1BilinearAdjusments[i];
-                    crossGlobalAdjusments[i] += crossMatrix[i];
+                    crossGlobalAdjusments[i] = crossMatrix[i];
                 }
 
                 ++crossAdjusmentsIt;
@@ -1269,7 +1274,7 @@ namespace DG
                                    const size_t* regionInteriorFacesStartIndexIt,
                                    const size_t* baseFacesIndexes,
                                    const size_t* neighborFacesIndexes,
-                                   double  localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                   double  transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                    double* bilinearAdjusmentsIt,
                                    double** regionsBilinearAdjasmentsIt,
                                    double* crossBilinearAdjusmentsIt,
@@ -1287,7 +1292,7 @@ namespace DG
                     (*regionMaterialPhaseIt)->density * (*regionMaterialPhaseIt)->heatCapacity / dt,
                     solution,
                     calculationBuffer,
-                    localJacobianMatrix + *regionStartTetrahedronIndexIt,
+                    transpLocalJacobianMatrix + *regionStartTetrahedronIndexIt,
                     (double(*)[Basis::N_FUNCTIONS])initialIt,
                     (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])bilinearAdjusmentsIt,
                     (double(*)[Basis::N_FUNCTIONS])fIt);
@@ -1304,7 +1309,7 @@ namespace DG
                     nodes,
                     tetrahedronsNodesTags,
                     calculationBuffer,
-                    localJacobianMatrix,
+                    transpLocalJacobianMatrix,
                     (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])crossBilinearAdjusmentsIt,
                     (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])bilinearAdjusmentsIt - *regionStartTetrahedronIndexIt,
                     (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])bilinearAdjusmentsIt - *regionStartTetrahedronIndexIt);
@@ -1335,7 +1340,7 @@ namespace DG
                                    const size_t* regionInteriorFacesStartIndexIt,
                                    const size_t* baseFacesIndexes,
                                    const size_t* neighborFacesIndexes,
-                                   double  localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                   double  transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                    double* bilinearAdjusmentsIt,
                                    double** regionsBilinearAdjasmentsIt,
                                    double* crossBilinearAdjusmentsIt,
@@ -1354,20 +1359,20 @@ namespace DG
                         (*regionMaterialPhaseIt)->thermalConductivity,
                         (*regionMaterialPhaseIt)->density * (*regionMaterialPhaseIt)->heatCapacity / dt,
                         calculationBuffer,
-                        localJacobianMatrix + *regionStartTetrahedronIndexIt,
+                        transpLocalJacobianMatrix + *regionStartTetrahedronIndexIt,
                         (double(*)[Basis::N_FUNCTIONS])initialIt,
                         (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])bilinearAdjusmentsIt,
                         (double(*)[Basis::N_FUNCTIONS])fIt);
                 }
                 else
                 {
-                    processTetrahedrons<MaterialPhase::LIQUID>(nodes,
+                    processTetrahedrons<MaterialPhase::SOLID>(nodes,
                         tetrahedronsNodesTags + *regionStartTetrahedronIndexIt,
                         nRegionTetrahedrons,
                         (*regionMaterialPhaseIt)->thermalConductivity,
                         (*regionMaterialPhaseIt)->density * (*regionMaterialPhaseIt)->heatCapacity / dt,
                         calculationBuffer,
-                        localJacobianMatrix + *regionStartTetrahedronIndexIt,
+                        transpLocalJacobianMatrix + *regionStartTetrahedronIndexIt,
                         (double(*)[Basis::N_FUNCTIONS])initialIt,
                         (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])bilinearAdjusmentsIt,
                         (double(*)[Basis::N_FUNCTIONS])fIt);
@@ -1385,7 +1390,7 @@ namespace DG
                                      nodes,
                                      tetrahedronsNodesTags,
                                      calculationBuffer,
-                                     localJacobianMatrix,
+                                     transpLocalJacobianMatrix,
                                      (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])crossBilinearAdjusmentsIt,
                                      (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])bilinearAdjusmentsIt - *regionStartTetrahedronIndexIt, 
                                      (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])bilinearAdjusmentsIt - *regionStartTetrahedronIndexIt);
@@ -1412,22 +1417,40 @@ namespace DG
                                                       const double detLambdaCoeff,
                                                       double* adjusmentIt)
         {
+            //double adj[4][4] = {0};
+            //adjusmentIt = *adj;
+            double* jiAdjusmentIt;
+            double* ijAdjusmentIt;
             for (uint8_t i = 0; i < N_FUNCTIONS; ++i)
             {
-                *adjusmentIt = detLambdaCoeff * (*flowMatrixElementIt + *flowMatrixElementIt - penaltyCoeff * (*massMatrixElementIt));
+                massMatrixElementIt += i;
+                *adjusmentIt += detLambdaCoeff * (- *flowMatrixElementIt - *flowMatrixElementIt + penaltyCoeff * (*massMatrixElementIt));
+                jiAdjusmentIt = adjusmentIt;
+                ijAdjusmentIt = adjusmentIt;
+
                 const double* ijFlowMatrixElementPtr = flowMatrixElementIt;
                 const double* jiFlowMatrixElementPtr = flowMatrixElementIt;
                 for (uint8_t j = i + 1; j < N_FUNCTIONS; ++j)
                 {
                     ++massMatrixElementIt;
+
+                    ++ijAdjusmentIt;
+                    jiAdjusmentIt += N_FUNCTIONS;
+
                     ++ijFlowMatrixElementPtr;
                     jiFlowMatrixElementPtr += N_FUNCTIONS;
 
-                    *adjusmentIt += detLambdaCoeff * (*ijFlowMatrixElementPtr + *jiFlowMatrixElementPtr - penaltyCoeff * (*massMatrixElementIt));
+                    double adjusment = detLambdaCoeff * (- *ijFlowMatrixElementPtr - *jiFlowMatrixElementPtr + penaltyCoeff * (*massMatrixElementIt));
+                    *ijAdjusmentIt += adjusment;
+                    *jiAdjusmentIt += adjusment;
                 }
 
                 flowMatrixElementIt += N_FUNCTIONS + 1;
+                adjusmentIt += N_FUNCTIONS + 1;
+                ++massMatrixElementIt;
             }
+
+            adjusmentIt = nullptr;
         }
 
         template<size_t N_FUNCTIONS>
@@ -1490,10 +1513,8 @@ namespace DG
 
         static double computeFaceUnitNormal(const Coordinates nodes[], const size_t triangleNodesTags[constants::tetrahedron::N_NODES], Coordinates& unitNormal)
         {
-            double transpJacobian[LocalCoordinates2D::COUNT * Coordinates::COUNT];
             Coordinates normal;
-            CoordinatesFunctions::computeTranspJacobianToFace(nodes, triangleNodesTags, transpJacobian);
-            CoordinatesFunctions::computeNormal(transpJacobian, normal);
+            CoordinatesFunctions::computeNormal(nodes, triangleNodesTags, normal);
 
             double det = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
 
@@ -1511,7 +1532,7 @@ namespace DG
                                                const double det,
                                                const Coordinates& unitNormal,
                                                const double dirichletValues[NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps],
-                                               const double localJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                               const double transpLocalJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                void* memoryBuffer,
                                                double bilinearAdjusments[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                double linearAdjusments[Basis::N_FUNCTIONS])
@@ -1522,16 +1543,19 @@ namespace DG
             double* powerVector = flowVector + Basis::N_FUNCTIONS;
             double* normalDerivatives = powerVector + Basis::N_FUNCTIONS;
 
-            Coordinates* gradients = (Coordinates*)(normalDerivatives + NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps);
+            Coordinates* gradients = (Coordinates*)(normalDerivatives + FaceLAC<Basis>::N_BASIS_VALUES);
 
             double commonMultiplier = det * lambda;
             double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(transpMatrixies_[iTriangle], determinant)*/;
 
-            CoordinatesFunctions::translate(localJacobianMatrix, FaceLAC<Basis>::getLocalGradientsByFace()[localIndex], NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::nSteps, gradients);
+            CoordinatesFunctions::translate(transpLocalJacobianMatrix, FaceLAC<Basis>::getLocalGradientsByFace()[localIndex], FaceLAC<Basis>::N_BASIS_VALUES, gradients);
 
             CoordinatesFunctions::coomputeDirectionalDerivative(gradients, FaceLAC<Basis>::N_BASIS_VALUES, unitNormal, normalDerivatives);
 
             FaceLAC<Basis>::computeFlowMatrix(localIndex, normalDerivatives, flowMatrix);
+            //std::cout << "Normal " << unitNormal.x << " " << unitNormal.y << " " << unitNormal.z << std::endl;
+            //printMatrix<Basis::N_FUNCTIONS>(flowMatrix);
+            std::cout << std::endl;
             addDirichletFaceBilinearAdjusmets<Basis::N_FUNCTIONS>(flowMatrix, FaceLAC<Basis>::getMassMatrixies()[localIndex], facePenalty, commonMultiplier, bilinearAdjusments);
 
             FaceLAC<Basis>::computeFlowVector(normalDerivatives, dirichletValues, flowVector);
@@ -1546,7 +1570,7 @@ namespace DG
                                                const double det,
                                                const Coordinates& unitNormal,
                                                const double conditionValue,
-                                               const double localJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                               const double transpLocalJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                void* memoryBuffer,
                                                double bilinearAdjusments[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                double linearAdjusments[Basis::N_FUNCTIONS])
@@ -1561,7 +1585,7 @@ namespace DG
             double commonMultiplier = det * lambda;
             double facePenalty = penalty /*/ geom_funct::computeTriangleDiametr(transpMatrixies_[iTriangle], determinant)*/;
 
-            CoordinatesFunctions::translate(localJacobianMatrix, FaceLAC<Basis>::getLocalGradientsByFace()[localIndex], NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::nSteps, gradients);
+            CoordinatesFunctions::translate(transpLocalJacobianMatrix, FaceLAC<Basis>::getLocalGradientsByFace()[localIndex], NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::nSteps, gradients);
 
             CoordinatesFunctions::coomputeDirectionalDerivative(gradients, FaceLAC<Basis>::N_BASIS_VALUES, unitNormal, normalDerivatives);
 
@@ -1579,7 +1603,7 @@ namespace DG
                                                     const double penalty,
                                                     const Coordinates nodes[],
                                                     const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                    const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                    const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                     void* memoryBuffer,
                                                     double bilinearTetrahedronsAdjusments[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                     double linearTetrahedronsAdjusments[][Basis::N_FUNCTIONS])
@@ -1608,7 +1632,7 @@ namespace DG
                                            det,
                                            unitNormal,
                                            dirichletValues,
-                                           localJacobianMatrix[elementIndex],
+                                           transpLocalJacobianMatrix[elementIndex],
                                            memoryBuffer,
                                            bilinearTetrahedronsAdjusments[elementIndex],
                                            linearTetrahedronsAdjusments[elementIndex]);
@@ -1624,7 +1648,7 @@ namespace DG
                                                     const double dirichletValue,
                                                     const Coordinates nodes[],
                                                     const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                    const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                    const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                     void* memoryBuffer,
                                                     double bilinearTetrahedronsAdjusments[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                     double linearTetrahedronsAdjusments[][Basis::N_FUNCTIONS])
@@ -1648,7 +1672,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValue,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments[elementIndex],
                     linearTetrahedronsAdjusments[elementIndex]);
@@ -1664,7 +1688,7 @@ namespace DG
                                                     const double penalty,
                                                     const Coordinates nodes[],
                                                     const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                    const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                    const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                     void* memoryBuffer,
                                                     double bilinearTetrahedronsAdjusments1Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                     double bilinearTetrahedronsAdjusments2Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
@@ -1698,7 +1722,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValues,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments1Area[elementIndex],
                     linearTetrahedronsAdjusments1Area[elementIndex]);
@@ -1725,7 +1749,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValues,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments1Area[elementIndex],
                     linearTetrahedronsAdjusments1Area[elementIndex]);
@@ -1743,7 +1767,7 @@ namespace DG
                                                     const double dirichletValue,
                                                     const Coordinates nodes[],
                                                     const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                    const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                    const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                     void* memoryBuffer,
                                                     double bilinearTetrahedronsAdjusments1Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                     double bilinearTetrahedronsAdjusments2Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
@@ -1773,7 +1797,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValue,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments1Area[elementIndex],
                     linearTetrahedronsAdjusments1Area[elementIndex]);
@@ -1791,7 +1815,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValue,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments1Area[elementIndex],
                     linearTetrahedronsAdjusments1Area[elementIndex]);
@@ -1807,7 +1831,7 @@ namespace DG
                                                            const double penalty,
                                                            const Coordinates nodes[],
                                                            const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                           const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                           const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                            void* memoryBuffer,
                                                            double bilinearTetrahedronsAdjusments[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                            double linearTetrahedronsAdjusments[][Basis::N_FUNCTIONS])
@@ -1845,7 +1869,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValues,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments[elementIndex],
                     linearTetrahedronsAdjusments[elementIndex]);
@@ -1861,7 +1885,7 @@ namespace DG
                                                            const double dirichletValue,
                                                            const Coordinates nodes[],
                                                            const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                           const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                           const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                            void* memoryBuffer,
                                                            double bilinearTetrahedronsAdjusments[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                            double linearTetrahedronsAdjusments[][Basis::N_FUNCTIONS])
@@ -1895,7 +1919,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValue,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments[elementIndex],
                     linearTetrahedronsAdjusments[elementIndex]);
@@ -1911,7 +1935,7 @@ namespace DG
                                                            const double penalty,
                                                            const Coordinates nodes[],
                                                            const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                           const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                           const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                            void* memoryBuffer,
                                                            double bilinearTetrahedronsAdjusments1Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                            double bilinearTetrahedronsAdjusments2Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
@@ -1951,7 +1975,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValues,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments1Area[elementIndex],
                     linearTetrahedronsAdjusments1Area[elementIndex]);
@@ -1974,7 +1998,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValues,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments2Area[elementIndex],
                     linearTetrahedronsAdjusments2Area[elementIndex]);
@@ -1992,7 +2016,7 @@ namespace DG
                                                            const double dirichletValue,
                                                            const Coordinates nodes[],
                                                            const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                           const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                           const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                            void* memoryBuffer,
                                                            double bilinearTetrahedronsAdjusments1Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                            double bilinearTetrahedronsAdjusments2Area[][FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
@@ -2030,7 +2054,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValue,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments1Area[elementIndex],
                     linearTetrahedronsAdjusments1Area[elementIndex]);
@@ -2044,7 +2068,7 @@ namespace DG
                     det,
                     unitNormal,
                     dirichletValue,
-                    localJacobianMatrix[elementIndex],
+                    transpLocalJacobianMatrix[elementIndex],
                     memoryBuffer,
                     bilinearTetrahedronsAdjusments2Area[elementIndex],
                     linearTetrahedronsAdjusments2Area[elementIndex]);
@@ -2071,7 +2095,7 @@ namespace DG
                                                  const size_t nFaces,
                                                  const Coordinates nodes[],
                                                  const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                 const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                 const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                  void* memoryBuffer,
                                                  double linearTetrahedronsAdjusments1Area[][Basis::N_FUNCTIONS],
                                                  double linearTetrahedronsAdjusments2Area[][Basis::N_FUNCTIONS])
@@ -2117,7 +2141,7 @@ namespace DG
                                                  const size_t nFaces,
                                                  const Coordinates nodes[],
                                                  const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                 const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                 const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                  void* memoryBuffer,
                                                  double linearTetrahedronsAdjusmentsArea[][Basis::N_FUNCTIONS])
         {
@@ -2161,7 +2185,7 @@ namespace DG
                                                  const double nerwmanValue,
                                                  const Coordinates nodes[],
                                                  const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                 const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                 const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                  double linearTetrahedronsAdjusments1Area[][Basis::N_FUNCTIONS],
                                                  double linearTetrahedronsAdjusments2Area[][Basis::N_FUNCTIONS])
         {
@@ -2199,7 +2223,7 @@ namespace DG
                                                  const double nerwmanValue,
                                                  const Coordinates nodes[],
                                                  const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                 const double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                 const double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                  double linearTetrahedronsAdjusmentsArea[][Basis::N_FUNCTIONS])
         {
             const double (*massVectors)[Basis::N_FUNCTIONS] = FaceLAC<Basis>::getMassVectors();
@@ -2234,7 +2258,7 @@ namespace DG
                                                     const Coordinates nodes[],
                                                     const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
                                                     void* calculationBuffer,
-                                                    double localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                    double transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                     double (*crossAdjusmentsIt)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                     double bilinearTetrahedronsAdjusments1[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS],
                                                     double bilinearTetrahedronsAdjusments2[][ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])
@@ -2301,7 +2325,7 @@ namespace DG
 
                 double commonMultiplier = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z) * lambda;
 
-                CoordinatesFunctions::translate(localJacobianMatrix[elementIndex0],
+                CoordinatesFunctions::translate(transpLocalJacobianMatrix[elementIndex0],
                     gradientsByFace[localIndex0],
                     NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::nSteps,
                     gradients);
@@ -2322,7 +2346,7 @@ namespace DG
                 normal.y = -normal.y;
                 normal.z = -normal.z;
 
-                CoordinatesFunctions::translate(localJacobianMatrix[elementIndex1],
+                CoordinatesFunctions::translate(transpLocalJacobianMatrix[elementIndex1],
                     gradientsByFace[localIndex1],
                     NumericalIntegration::Triangle::Gauss<Basis::ORDER + 1>::nSteps,
                     gradients);
@@ -2358,7 +2382,7 @@ namespace DG
                                       const size_t* regionStartTetrahedronIndexIt,
                                       const Coordinates nodes[],
                                       const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                      double  localJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                      double  transpLocalJacobianMatrix[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                       double* const regionsBilinearAdjusments[],
                                       double* const regionsLinearAdjusmenst[])
         {
@@ -2388,7 +2412,7 @@ namespace DG
                                 ((Boundary::ValueCondition*)(boundaryIt->condition))->value,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]]);
@@ -2402,7 +2426,7 @@ namespace DG
                                 ((Boundary::ValueCondition*)(boundaryIt->condition))->value,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]]);
@@ -2419,7 +2443,7 @@ namespace DG
                                 penalty,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]]);
@@ -2432,7 +2456,7 @@ namespace DG
                                 penalty,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]]);
@@ -2446,7 +2470,7 @@ namespace DG
                                                      ((Boundary::ValueCondition*)(boundaryIt->condition))->value,
                                                      nodes,
                                                      tetrahedronsNodesTags,
-                                                     localJacobianMatrix,
+                                                     transpLocalJacobianMatrix,
                                                      (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]]);
 
                         break;
@@ -2457,7 +2481,7 @@ namespace DG
                             nFaces,
                             nodes,
                             tetrahedronsNodesTags,
-                            localJacobianMatrix,
+                            transpLocalJacobianMatrix,
                             calculationBuffer,
                             (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]]);
 
@@ -2487,7 +2511,7 @@ namespace DG
                                 ((Boundary::ValueCondition*)(boundaryIt->condition))->value,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[1]],
@@ -2504,7 +2528,7 @@ namespace DG
                                 ((Boundary::ValueCondition*)(boundaryIt->condition))->value,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[1]],
@@ -2524,7 +2548,7 @@ namespace DG
                                 penalty,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[1]],
@@ -2540,7 +2564,7 @@ namespace DG
                                 penalty,
                                 nodes,
                                 tetrahedronsNodesTags,
-                                localJacobianMatrix,
+                                transpLocalJacobianMatrix,
                                 calculationBuffer,
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[0]],
                                 (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[boundaryIt->regionsIndexes[1]],
@@ -2557,7 +2581,7 @@ namespace DG
                             ((Boundary::ValueCondition*)(boundaryIt->condition))->value,
                             nodes,
                             tetrahedronsNodesTags,
-                            localJacobianMatrix,
+                            transpLocalJacobianMatrix,
                             (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]],
                             (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[1]]);
                         break;
@@ -2569,7 +2593,7 @@ namespace DG
                             nFaces,
                             nodes,
                             tetrahedronsNodesTags,
-                            localJacobianMatrix,
+                            transpLocalJacobianMatrix,
                             calculationBuffer,
                             (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[0]],
                             (double(*)[Basis::N_FUNCTIONS])regionsLinearAdjusmenst[boundaryIt->regionsIndexes[1]]);
@@ -2603,7 +2627,7 @@ namespace DG
                                                  const size_t* regionStartTetrahedronIndexIt,
                                                  const Coordinates nodes[],
                                                  const size_t tetrahedronsNodesTags[][constants::tetrahedron::N_NODES],
-                                                 double  localJacobianMatrixes[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
+                                                 double  transpLocalJacobianMatrixes[][LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                                  double* const regionsBilinearAdjusments[],
                                                  unsigned int** interfaceFragmentsTrianglesIndexesIt,
                                                  unsigned int* interfacFragmentsCountIt,
@@ -2643,7 +2667,7 @@ namespace DG
                     nonconformInterfaces->thermalConductivity,
                     penalty,
                     calculationBuffer,
-                    localJacobianMatrixes,
+                    transpLocalJacobianMatrixes,
                     (double(*)[FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS]) * crossAdjusmentsIt,
                     (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[nonconformInterfaces->regionsIndexes[0]],
                     (double(*)[ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS])regionsBilinearAdjusments[nonconformInterfaces->regionsIndexes[1]]);
@@ -2820,7 +2844,7 @@ namespace DG
                 tripletIt = computeAdjusmentsTriplets(nonconformCrossAdjusments[i],
                                                       interfacFragmentsCount[i],
                                                       tetBaseFacesIndexes + surfacesFacesStartIndexes[nonconformInterfaces[i].sideIndexes[0]],
-                                                      tetNeigbourFacesIndexes + surfacesFacesStartIndexes[nonconformInterfaces[i].sideIndexes[1]],
+                                                      tetBaseFacesIndexes + surfacesFacesStartIndexes[nonconformInterfaces[i].sideIndexes[1]],
                                                       interfacesFragmentsTrianglesIndexes[i],
                                                       LinearLagrangeBasis::N_FUNCTIONS,
                                                       startIndexes,
@@ -2835,7 +2859,7 @@ namespace DG
             return *regionStartTetrahedronsTagIt;
         }
 
-        const int MAX_ITERATIONS = 1'000;
+        const int MAX_ITERATIONS = 10'000;
 
         void initSolver()
         {
@@ -2848,7 +2872,7 @@ namespace DG
             ElementLAC<Basis>::finalize();
             FaceLAC<Basis>::finalize();
         }
-
+#define DEBUG_SHOW_SLAE true;
         double solveInitialIteration(const unsigned int nRegions,
                                    const MaterialPhase* const regionsMaterialPhases[],
                                    const Boundary boundaries[],
@@ -2893,7 +2917,7 @@ namespace DG
 
             size_t nInteriorFaces = regionsInteriorFacesStartIndexes[nRegions] - regionsInteriorFacesStartIndexes[0];
 
-            size_t nBilinearAdjusments = nTetrahedrons * ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS + nInteriorFaces * FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS;
+            size_t nBilinearAdjusments = nTetrahedrons * ElementLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS + nInteriorFaces * 2 * FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS;
 
             size_t nDOFs = nTetrahedrons * Basis::N_FUNCTIONS;
 
@@ -2903,7 +2927,7 @@ namespace DG
             double* initialPtr = initial.data();
             double* fPtr = f.data();
 
-            double (*localJacobianMatrixies)[LocalCoordinates3D::COUNT * Coordinates::COUNT] = 
+            double (*transpLocalJacobianMatrixies)[LocalCoordinates3D::COUNT * Coordinates::COUNT] = 
                 (double(*)[LocalCoordinates3D::COUNT * Coordinates::COUNT])malloc(nTetrahedrons * LocalCoordinates3D::COUNT * Coordinates::COUNT * sizeof(double));
 
             double* bilinearAdjusmentsIt = bilinearAdjusments;
@@ -2913,7 +2937,7 @@ namespace DG
 
             const MaterialPhase* const* materialPhasePtrIt = regionsMaterialPhases;
             const size_t *regionStartTetrahedronIndexIt = regionsStartTetrahedronsIndexes;
-            double (*localJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT] = localJacobianMatrixies;
+            double (*transpLocalJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT] = transpLocalJacobianMatrixies;
 
             double* crossBilinearAdjusments = (double*)malloc(nInteriorFaces * FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS * sizeof(double));
             processRegions(nRegions,
@@ -2927,13 +2951,20 @@ namespace DG
                            regionsInteriorFacesStartIndexes,
                            tetBaseFacesIndexes,
                            tetNeigbourFacesIndexes,
-                           localJacobianMatrixIt,
+                           transpLocalJacobianMatrixIt,
                            bilinearAdjusmentsIt,
                            regionsBilinearAdjusments,
                            crossBilinearAdjusments,
                            initialIt,
                            fIt,
                            regionsLinearAdjusments);
+
+            //printf("Tetrahedron Matrix 1\n");
+            //printMatrix<Basis::N_FUNCTIONS>(bilinearAdjusments);
+
+
+            //printf("Tetrahedron Matrix 2\n");
+            //printMatrix<Basis::N_FUNCTIONS>(bilinearAdjusments + 16);
 
             proceedBoundaries(boundaries,
                              nBoundaries,
@@ -2946,7 +2977,7 @@ namespace DG
                              regionStartTetrahedronIndexIt,
                              nodes,
                              (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
-                             localJacobianMatrixIt,
+                             transpLocalJacobianMatrixIt,
                              regionsBilinearAdjusments,
                              regionsLinearAdjusments);
 
@@ -2960,13 +2991,13 @@ namespace DG
                                        regionStartTetrahedronIndexIt,
                                        nodes,
                                        (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
-                                       localJacobianMatrixIt,
+                                       transpLocalJacobianMatrixIt,
                                        regionsBilinearAdjusments,
                                        interfacesFragmentsTrianglesIndexes,
                                        interfacFragmentsCount,
                                        nonconformCrossAdjusments);
 
-            nBilinearAdjusments += nFragments * FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS;
+            nBilinearAdjusments += nFragments * 2 * FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS;
 
             Eigen::Index* regionsDOFsStartIndexes = (Eigen::Index*)malloc(nRegions * sizeof(Eigen::Index));
             Eigen::Triplet<double, Eigen::Index>* triplets = (Eigen::Triplet<double, Eigen::Index>*)malloc(nBilinearAdjusments * sizeof(Eigen::Triplet<double, Eigen::Index>));
@@ -2989,14 +3020,17 @@ namespace DG
 
             Eigen::SparseMatrix<double, 0, Eigen::Index> A(nDOFs, nDOFs);
             A.setFromTriplets(triplets, triplets + nBilinearAdjusments);
-            delete[] triplets;
+            free(triplets);
             printf("Building matrix finished\n");
 
             printf("\nSolving slae...\n");
 
 #if DEBUG_SHOW_SLAE
             std::cout << A << std::endl;
-            std::cout << b << std::endl;
+            std::cout << "Intitial" << std::endl;
+            std::cout << initial << std::endl;
+            std::cout << "Power vector" << std::endl;
+            std::cout << f << std::endl;
 #endif
             Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double, 0, Eigen::Index>> solver;
             //Eigen::BiCGSTAB<Eigen::SparseMatrix<double, 0, Eigen::Index>> solver;
@@ -3012,7 +3046,7 @@ namespace DG
 
 #if DEBUG_SHOW_SLAE
             std::cout << "Solution" << std::endl;
-            std::cout << x << std::endl;
+            std::cout << solutionIt->_DOFs << std::endl;
 #endif
 
             double err = computeEnergyError((double(*)[Basis::N_FUNCTIONS])(solutionIt->_DOFs.data()),
@@ -3024,16 +3058,15 @@ namespace DG
             for (unsigned int i = 0; i < nNonconformInterfaces; ++i)
             {
                 free(interfacesFragmentsTrianglesIndexes[i]);
-                free(nonconformCrossAdjusments);
+                free(nonconformCrossAdjusments[i]);
             }
 
             free(nodes);
             free(tetFacesIndexes);
             free(tetNodesTag);
             free(bilinearAdjusments);
-            free(localJacobianMatrixies);
+            free(transpLocalJacobianMatrixies);
             free(crossBilinearAdjusments);
-            free(triplets);
 
             return err;
         }
@@ -3099,7 +3132,7 @@ namespace DG
             double* initialPtr = initial.data();
             double* fPtr = f.data();
 
-            double (*localJacobianMatrixies)[LocalCoordinates3D::COUNT * Coordinates::COUNT] =
+            double (*transpLocalJacobianMatrixies)[LocalCoordinates3D::COUNT * Coordinates::COUNT] =
                 (double(*)[LocalCoordinates3D::COUNT * Coordinates::COUNT])malloc(nTetrahedrons * LocalCoordinates3D::COUNT * Coordinates::COUNT * sizeof(double));
 
             double* bilinearAdjusmentsIt = bilinearAdjusments;
@@ -3109,7 +3142,7 @@ namespace DG
 
             const MaterialPhase* const* materialPhasePtrIt = regionsMaterialPhases;
             const size_t* regionStartTetrahedronIndexIt = regionsStartTetrahedronsIndexes;
-            double (*localJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT] = localJacobianMatrixies;
+            double (*transpLocalJacobianMatrixIt)[LocalCoordinates3D::COUNT * Coordinates::COUNT] = transpLocalJacobianMatrixies;
 
             double* crossBilinearAdjusments = (double*)malloc(nInteriorFaces * FaceLAC<Basis>::N_LOCAL_MATRIX_ELEMENTS * sizeof(double));
             processRegions(nRegions,
@@ -3124,7 +3157,7 @@ namespace DG
                            regionsInteriorFacesStartIndexes,
                            tetBaseFacesIndexes,
                            tetNeigbourFacesIndexes,
-                           localJacobianMatrixIt,
+                           transpLocalJacobianMatrixIt,
                            bilinearAdjusmentsIt,
                            regionsBilinearAdjusments,
                            crossBilinearAdjusments,
@@ -3143,7 +3176,7 @@ namespace DG
                 regionStartTetrahedronIndexIt,
                 nodes,
                 (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
-                localJacobianMatrixIt,
+                transpLocalJacobianMatrixIt,
                 regionsBilinearAdjusments,
                 regionsLinearAdjusments);
 
@@ -3157,7 +3190,7 @@ namespace DG
                 regionStartTetrahedronIndexIt,
                 nodes,
                 (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
-                localJacobianMatrixIt,
+                transpLocalJacobianMatrixIt,
                 regionsBilinearAdjusments,
                 interfacesFragmentsTrianglesIndexes,
                 interfacFragmentsCount,
@@ -3186,14 +3219,14 @@ namespace DG
 
             Eigen::SparseMatrix<double, 0, Eigen::Index> A(nDOFs, nDOFs);
             A.setFromTriplets(triplets, triplets + nBilinearAdjusments);
-            delete[] triplets;
+            free(triplets);
             printf("Building matrix finished\n");
 
             printf("\nSolving slae...\n");
 
 #if DEBUG_SHOW_SLAE
             std::cout << A << std::endl;
-            std::cout << b << std::endl;
+            std::cout << f << std::endl;
 #endif
             Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double, 0, Eigen::Index>> solver;
             //Eigen::BiCGSTAB<Eigen::SparseMatrix<double, 0, Eigen::Index>> solver;
@@ -3209,7 +3242,7 @@ namespace DG
 
 #if DEBUG_SHOW_SLAE
             std::cout << "Solution" << std::endl;
-            std::cout << x << std::endl;
+            std::cout << solutionIt->_DOFs << std::endl;
 #endif
 
             double err = computeEnergyError((double(*)[Basis::N_FUNCTIONS])(solutionIt->_DOFs.data()),
@@ -3221,7 +3254,7 @@ namespace DG
             for (unsigned int i = 0; i < nNonconformInterfaces; ++i)
             {
                 free(interfacesFragmentsTrianglesIndexes[i]);
-                free(nonconformCrossAdjusments);
+                free(nonconformCrossAdjusments[i]);
             }
 
             free(nodes);
@@ -3229,9 +3262,8 @@ namespace DG
             free(tetNodesTag);
             free(facesTetrahedronsIndexes);
             free(bilinearAdjusments);
-            free(localJacobianMatrixies);
+            free(transpLocalJacobianMatrixies);
             free(crossBilinearAdjusments);
-            free(triplets);
 
             return err;
         }
@@ -3319,8 +3351,8 @@ namespace DG
             uint8_t nElements;
             int entityTag;
 
-            double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
-            double localJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
+            double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
+            double transpLocalJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT];
 
             Coordinates gradientSolidSideSum, gradientLiquidSideSum;
             uint8_t nElementSolidSide, nElementLiquidSide;
@@ -3355,10 +3387,10 @@ namespace DG
 
                     solution.compute(elementsTags[j], tetrahedronMainLocalPoints[iLocalNode], localGradient);
 
-                    double det = CoordinatesFunctions::computeTranspJacobianMatrix(tetrahedronNodes, transpJacobianMatrix);
-                    CoordinatesFunctions::computeLocalJacobianMatrix(transpJacobianMatrix, det, localJacobianMatrix);
+                    double det = CoordinatesFunctions::computeJacobianMatrix(tetrahedronNodes, jacobianMatrix);
+                    CoordinatesFunctions::computeTranspLocalJacobianMatrix(jacobianMatrix, det, transpLocalJacobianMatrix);
 
-                    CoordinatesFunctions::translate(localJacobianMatrix, localGradient, gradient);
+                    CoordinatesFunctions::translate(transpLocalJacobianMatrix, localGradient, gradient);
 
                     if (entityTag == solidRegionTag)
                     {

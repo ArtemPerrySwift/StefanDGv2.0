@@ -19,11 +19,11 @@ namespace CoordinatesFunctions
         double transitionMatrixBuf[4];
 
         transitionMatrixBuf[0] = directionNodesPtr->y - tetrahedroBeginNodeIt->y;
-        transitionMatrixBuf[2] = directionNodesPtr->z - tetrahedroBeginNodeIt->z;
+        transitionMatrixBuf[1] = directionNodesPtr->z - tetrahedroBeginNodeIt->z;
 
         ++triangleNodeIndexIt;
         directionNodesPtr = nodes + *triangleNodeIndexIt;
-        transitionMatrixBuf[1] = directionNodesPtr->y - tetrahedroBeginNodeIt->y;
+        transitionMatrixBuf[2] = directionNodesPtr->y - tetrahedroBeginNodeIt->y;
         transitionMatrixBuf[3] = directionNodesPtr->z - tetrahedroBeginNodeIt->z;
 
         double det = transitionMatrixBuf[0] * transitionMatrixBuf[3] - transitionMatrixBuf[1] * transitionMatrixBuf[2];
@@ -88,6 +88,14 @@ namespace CoordinatesFunctions
 
     }
 
+    void translate(const LocalCoordinates3D& localCoordinates, const Coordinates& basePoint, const double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], Coordinates& point)
+    {
+        point = basePoint;
+        point.x = jacobianMatrix[0] * localCoordinates.u + jacobianMatrix[1] * localCoordinates.v + jacobianMatrix[2] * localCoordinates.w;
+        point.y = jacobianMatrix[3] * localCoordinates.u + jacobianMatrix[4] * localCoordinates.v + jacobianMatrix[5] * localCoordinates.w;
+        point.z = jacobianMatrix[6] * localCoordinates.u + jacobianMatrix[7] * localCoordinates.v + jacobianMatrix[8] * localCoordinates.w;
+    }
+
     void translatePointCoordinatesToLocal(const Coordinates& basePoint, const Coordinates &point, const double transitionMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], LocalCoordinates3D& localCoordinates)
     {
         Coordinates pointsDiff = { point.x - basePoint.x, point.y - basePoint.y, point.z - basePoint.z };
@@ -113,7 +121,7 @@ namespace CoordinatesFunctions
             localCoordinates->u = transitionMatrix[0] * y + transitionMatrix[1] * z;
             localCoordinates->v = transitionMatrix[2] * y + transitionMatrix[3] * z;
 
-            ++points;
+
             ++localCoordinates;
         }
     }
@@ -168,8 +176,8 @@ namespace CoordinatesFunctions
         translCoeff->v = triangleLocalNodes[1].v - triangleLocalNodes[0].v;
 
         ++translCoeff;
-        translCoeff->u = triangleLocalNodes[1].u - triangleLocalNodes[0].u;
-        translCoeff->v = triangleLocalNodes[1].v - triangleLocalNodes[0].v;
+        translCoeff->u = triangleLocalNodes[2].u - triangleLocalNodes[0].u;
+        translCoeff->v = triangleLocalNodes[2].v - triangleLocalNodes[0].v;
     }
 
     void translateFragmentLocalPoints(const LocalCoordinates2D fragmentBasePoint,
@@ -292,6 +300,37 @@ namespace CoordinatesFunctions
         normal.z = transpJacobianMatrix[0] * transpJacobianMatrix[4] - transpJacobianMatrix[3] * transpJacobianMatrix[1];
     }
 
+    double computeJacobianMatrix(const Coordinates* tetrahedronNodeIt, double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT])
+    {
+        const Coordinates* tetrahedronBeginNodeIt = tetrahedronNodeIt;
+        ++tetrahedronNodeIt;
+
+
+        jacobianMatrix[0] = tetrahedronNodeIt->x - tetrahedronBeginNodeIt->x;
+        jacobianMatrix[3] = tetrahedronNodeIt->y - tetrahedronBeginNodeIt->y;
+        jacobianMatrix[6] = tetrahedronNodeIt->z - tetrahedronBeginNodeIt->z;
+
+        ++tetrahedronNodeIt;
+        jacobianMatrix[1] = tetrahedronNodeIt->x - tetrahedronBeginNodeIt->x;
+        jacobianMatrix[4] = tetrahedronNodeIt->y - tetrahedronBeginNodeIt->y;
+        jacobianMatrix[7] = tetrahedronNodeIt->z - tetrahedronBeginNodeIt->z;
+
+        ++tetrahedronNodeIt;
+        jacobianMatrix[2] = tetrahedronNodeIt->x - tetrahedronBeginNodeIt->x;
+        jacobianMatrix[5] = tetrahedronNodeIt->y - tetrahedronBeginNodeIt->y;
+        jacobianMatrix[8] = tetrahedronNodeIt->z - tetrahedronBeginNodeIt->z;
+
+
+        double det = jacobianMatrix[0] * jacobianMatrix[4] * jacobianMatrix[8];
+        det += jacobianMatrix[2] * jacobianMatrix[3] * jacobianMatrix[7];
+        det += jacobianMatrix[1] * jacobianMatrix[5] * jacobianMatrix[6];
+        det -= jacobianMatrix[2] * jacobianMatrix[4] * jacobianMatrix[6];
+        det -= jacobianMatrix[0] * jacobianMatrix[5] * jacobianMatrix[7];
+        det -= jacobianMatrix[1] * jacobianMatrix[3] * jacobianMatrix[8];
+
+        return det;
+    }
+
     double computeTranspJacobianMatrix(const Coordinates* tetrahedronNodeIt, double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT])
     {
         const Coordinates* tetrahedroBeginNodeIt = tetrahedronNodeIt;
@@ -384,6 +423,54 @@ namespace CoordinatesFunctions
 
         return det;
     }
+
+    double computeJacobianMatrix(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double jacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT])
+    {
+        const Coordinates* tetrahedronBeginNodeIt = nodes + *tetrahedronNodeIndexIt;
+        ++tetrahedronNodeIndexIt;
+        const Coordinates* directionNodesPtr = nodes + *tetrahedronNodeIndexIt;
+
+        jacobianMatrix[0] = directionNodesPtr->x - tetrahedronBeginNodeIt->x;
+        jacobianMatrix[3] = directionNodesPtr->y - tetrahedronBeginNodeIt->y;
+        jacobianMatrix[6] = directionNodesPtr->z - tetrahedronBeginNodeIt->z;
+
+        ++tetrahedronNodeIndexIt;
+        directionNodesPtr = nodes + *tetrahedronNodeIndexIt;
+        jacobianMatrix[1] = directionNodesPtr->x - tetrahedronBeginNodeIt->x;
+        jacobianMatrix[4] = directionNodesPtr->y - tetrahedronBeginNodeIt->y;
+        jacobianMatrix[7] = directionNodesPtr->z - tetrahedronBeginNodeIt->z;
+
+        ++tetrahedronNodeIndexIt;
+        directionNodesPtr = nodes + *tetrahedronNodeIndexIt;
+        jacobianMatrix[2] = directionNodesPtr->x - tetrahedronBeginNodeIt->x;
+        jacobianMatrix[5] = directionNodesPtr->y - tetrahedronBeginNodeIt->y;
+        jacobianMatrix[8] = directionNodesPtr->z - tetrahedronBeginNodeIt->z;
+
+        double det = jacobianMatrix[0] * jacobianMatrix[4] * jacobianMatrix[8];
+        det += jacobianMatrix[2] * jacobianMatrix[3] * jacobianMatrix[7];
+        det += jacobianMatrix[1] * jacobianMatrix[5] * jacobianMatrix[6];
+        det -= jacobianMatrix[2] * jacobianMatrix[4] * jacobianMatrix[6];
+        det -= jacobianMatrix[0] * jacobianMatrix[5] * jacobianMatrix[7];
+        det -= jacobianMatrix[1] * jacobianMatrix[3] * jacobianMatrix[8];
+
+        return det;
+    }
+
+    void computeTranspLocalJacobianMatrix(const double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], const double determinant, double transpLocalJacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT])
+    {
+        transpLocalJacobianMatrix[0] = (jacobianMatrix[4] * jacobianMatrix[8] - jacobianMatrix[5] * jacobianMatrix[7]) / determinant;
+        transpLocalJacobianMatrix[1] = (jacobianMatrix[5] * jacobianMatrix[6] - jacobianMatrix[3] * jacobianMatrix[8]) / determinant;
+        transpLocalJacobianMatrix[2] = (jacobianMatrix[3] * jacobianMatrix[7] - jacobianMatrix[4] * jacobianMatrix[6]) / determinant;
+
+        transpLocalJacobianMatrix[3] = (jacobianMatrix[2] * jacobianMatrix[7] - jacobianMatrix[1] * jacobianMatrix[8]) / determinant;
+        transpLocalJacobianMatrix[4] = (jacobianMatrix[0] * jacobianMatrix[8] - jacobianMatrix[2] * jacobianMatrix[6]) / determinant;
+        transpLocalJacobianMatrix[5] = (jacobianMatrix[1] * jacobianMatrix[6] - jacobianMatrix[0] * jacobianMatrix[7]) / determinant;
+
+        transpLocalJacobianMatrix[6] = (jacobianMatrix[1] * jacobianMatrix[5] - jacobianMatrix[2] * jacobianMatrix[4]) / determinant;
+        transpLocalJacobianMatrix[7] = (jacobianMatrix[2] * jacobianMatrix[3] - jacobianMatrix[0] * jacobianMatrix[5]) / determinant;
+        transpLocalJacobianMatrix[8] = (jacobianMatrix[0] * jacobianMatrix[4] - jacobianMatrix[1] * jacobianMatrix[3]) / determinant;
+    }
+
 
     void computeLocalJacobianMatrix(const double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], const double determinant, double* localJacobianMatrixElementIt)
     {
@@ -531,6 +618,10 @@ namespace CoordinatesFunctions
 			gradientIt->x = localJacobian[0] * localGradientIt->u + localJacobian[1] * localGradientIt->v + localJacobian[2] * localGradientIt->w;
 			gradientIt->y = localJacobian[3] * localGradientIt->u + localJacobian[4] * localGradientIt->v + localJacobian[5] * localGradientIt->w;
 			gradientIt->z = localJacobian[6] * localGradientIt->u + localJacobian[7] * localGradientIt->v + localJacobian[8] * localGradientIt->w;
+
+           /* gradientIt->x = localJacobian[0] * localGradientIt->u + localJacobian[3] * localGradientIt->v + localJacobian[6] * localGradientIt->w;
+            gradientIt->y = localJacobian[1] * localGradientIt->u + localJacobian[4] * localGradientIt->v + localJacobian[7] * localGradientIt->w;
+            gradientIt->z = localJacobian[2] * localGradientIt->u + localJacobian[5] * localGradientIt->v + localJacobian[8] * localGradientIt->w;*/
 
 			++gradientIt;
 			++localGradientIt;
