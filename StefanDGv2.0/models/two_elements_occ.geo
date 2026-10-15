@@ -1,7 +1,7 @@
 // Gmsh project created on Mon Apr 28 18:38:01 2025
 SetFactory("OpenCASCADE");
 //+
-Point(1) = {0, 0, 0, 2.0};
+Point(1) = {0, 0, 0, 0.5};
 //+
 Point(2) = {1, 0, 0, 2.0};
 //+
@@ -51,4 +51,4 @@ Volume(1) = {1};
 //+
 Physical Surface("D", 10) = {2, 3, 4};
 //+
-Physical Volume("M:L; 1.5;1.3;1.8;", 11) = {1};
+Physical Volume("M:L; 1.0;0.0;0.0;", 11) = {1};

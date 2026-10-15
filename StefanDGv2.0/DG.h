@@ -40,18 +40,20 @@ namespace DG
 								   Solution* solutionIt);
 
 		double solveIteration(const unsigned int nRegions,
-						    const MaterialPhase* const regionsMaterialPhases[],
-						    const Boundary boundaries[],
-						    const unsigned int nBoundaries,
-						    const NonconformInterface nonconformInterfaces[],
-						    const unsigned int nNonconformInterfaces,
-							const double t,
-						    const double dt,
-						    const double penalty,
-						    const Solution& solution,
-						    void* calculationBuffer,
-						    void* additionalBuffer,
-						    Solution* solutionIt);
+						      const MaterialPhase* const regionsMaterialPhases[],
+						      const Boundary boundaries[],
+						      const unsigned int nBoundaries,
+						      const NonconformInterface nonconformInterfaces[],
+						      const unsigned int nNonconformInterfaces,
+						      const double t,
+						      const double dt,
+						      const double penalty,
+						      const char* currentSolutionModelName,
+						      const Solution& previousSolution,
+						      const char* previousSolutionModelName,
+						      void* calculationBuffer,
+						      void* additionalBuffer,
+						      Solution* solutionIt);
 
 		void relocateInitialFrontNodes(MaterialPhase solidMaterialsPhase,
 									   MaterialPhase liquidMaterialsPhase,
@@ -93,18 +95,20 @@ namespace DG
 													  Solution* solutionIt);
 
 		friend double StefanTask::solveIteration(const unsigned int nRegions,
-											   const MaterialPhase* const regionsMaterialPhases[],
-											   const Boundary boundaries[],
-											   const unsigned int nBoundaries,
-											   const NonconformInterface nonconformInterfaces[],
-											   const unsigned int nNonconformInterfaces,
-											   const double t,
-											   const double dt,
-											   const double penalty,
-											   const Solution& solution,
-											   void* calculationBuffer,
-											   void* additionalBuffer,
-											   Solution* solutionIt);
+												 const MaterialPhase* const regionsMaterialPhases[],
+												 const Boundary boundaries[],
+												 const unsigned int nBoundaries,
+												 const NonconformInterface nonconformInterfaces[],
+												 const unsigned int nNonconformInterfaces,
+												 const double t,
+												 const double dt,
+												 const double penalty,
+												 const char* currentSolutionModelName,
+												 const Solution& previousSolution,
+												 const char* previousSolutionModelName,
+												 void* calculationBuffer,
+												 void* additionalBuffer,
+												 Solution* solutionIt);
 
 		double compute(const size_t elementTag, const LocalCoordinates3D LocalPoint3D) const;
 		void compute(const size_t elementTag, const LocalCoordinates3D LocalPoint3D, LocalCoordinates3D& gradient) const;

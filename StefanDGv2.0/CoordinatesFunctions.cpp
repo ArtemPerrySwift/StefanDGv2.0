@@ -91,9 +91,9 @@ namespace CoordinatesFunctions
     void translate(const LocalCoordinates3D& localCoordinates, const Coordinates& basePoint, const double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], Coordinates& point)
     {
         point = basePoint;
-        point.x = jacobianMatrix[0] * localCoordinates.u + jacobianMatrix[1] * localCoordinates.v + jacobianMatrix[2] * localCoordinates.w;
-        point.y = jacobianMatrix[3] * localCoordinates.u + jacobianMatrix[4] * localCoordinates.v + jacobianMatrix[5] * localCoordinates.w;
-        point.z = jacobianMatrix[6] * localCoordinates.u + jacobianMatrix[7] * localCoordinates.v + jacobianMatrix[8] * localCoordinates.w;
+        point.x += jacobianMatrix[0] * localCoordinates.u + jacobianMatrix[1] * localCoordinates.v + jacobianMatrix[2] * localCoordinates.w;
+        point.y += jacobianMatrix[3] * localCoordinates.u + jacobianMatrix[4] * localCoordinates.v + jacobianMatrix[5] * localCoordinates.w;
+        point.z += jacobianMatrix[6] * localCoordinates.u + jacobianMatrix[7] * localCoordinates.v + jacobianMatrix[8] * localCoordinates.w;
     }
 
     void translatePointCoordinatesToLocal(const Coordinates& basePoint, const Coordinates &point, const double transitionMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], LocalCoordinates3D& localCoordinates)
@@ -304,7 +304,6 @@ namespace CoordinatesFunctions
     {
         const Coordinates* tetrahedronBeginNodeIt = tetrahedronNodeIt;
         ++tetrahedronNodeIt;
-
 
         jacobianMatrix[0] = tetrahedronNodeIt->x - tetrahedronBeginNodeIt->x;
         jacobianMatrix[3] = tetrahedronNodeIt->y - tetrahedronBeginNodeIt->y;

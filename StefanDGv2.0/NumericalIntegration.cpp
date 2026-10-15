@@ -151,5 +151,20 @@ namespace NumericalIntegration
 			}
 
 		}
+
+		void Gauss<2>::changeValuesOrder(const double values[], const uint8_t nFunctions, const uint8_t nodesChangins, double outValues[])
+		{
+			for (uint8_t i = 0; i < nFunctions; ++i)
+			{
+				changeValuesOrder(values, nodesChangins, outValues);
+				values += 3;
+				outValues += 3;
+				//*values = outValues[0];
+				//*(++values) = outValues[1];
+				//*(++values) = outValues[2];
+				//++values;
+			}
+
+		}
 	}
 }

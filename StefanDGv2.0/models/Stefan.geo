@@ -148,7 +148,7 @@ Physical Volume("M:L; 580;1000;4187;", 85) = {1, 3};
 //+
 Physical Volume("M:S; 2230;900;2060;", 86) = {4, 2};
 //+
-Physical Surface("S: 273.15", 87) = {39};
+Physical Surface("S:273.15", 87) = {39};
 //+
 Physical Surface("D:293.15", 88) = {1};
 //+

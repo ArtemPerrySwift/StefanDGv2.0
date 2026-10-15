@@ -70,6 +70,7 @@ namespace NumericalIntegration
 
 			static void changeValuesOrder(const double values[nSteps], const uint8_t nodesChangins, double outValues[nSteps]);
 			static void changeValuesOrder(double values[], const uint8_t nFunctions, const uint8_t nodesChangins);
+			static void changeValuesOrder(const double values[], const uint8_t nFunctions, const uint8_t nodesChangins, double outValues[]);
 
 		private:
 			Gauss<2>() = default;

@@ -1,7 +1,7 @@
 // Gmsh project created on Sat Jul 05 03:01:13 2025
 SetFactory("OpenCASCADE");
 //+
-Point(1) = {0, 0, 0, 2.0};
+Point(1) = {0, 0, 0, 0.5};
 //+
 Point(2) = {-1, 0, 0, 2.0};
 //+
@@ -52,10 +52,11 @@ Rotate {{0, 1, 0}, {0, 0, 0}, Pi/2} {
 Physical Surface("C", 13) = {2, 7};
 //+
 Physical Surface("D", 14) = {1, 5, 8, 3};
+//Physical Surface("D", 14) = {1, 2, 5, 7, 8, 3};
 //+
 Translate {0, 0, 1} {
   Volume{2}; 
 }
 //+
-Physical Volume("M:L; 1.0;0.0;0.0;", 15) = {1, 2};
+Physical Volume("M:L; 1.5;1.7;1.3;", 15) = {1, 2};
 

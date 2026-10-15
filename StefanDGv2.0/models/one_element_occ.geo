@@ -43,4 +43,4 @@ Volume(1) = {1};
 //+
 Physical Surface("D", 7) = {3, 2, 1};
 //+
-Physical Volume("M:L; 1.5;1.3;1.7;", 8) = {1};
+Physical Volume("M:L; 1.5;1.0;1.0;", 8) = {1};
