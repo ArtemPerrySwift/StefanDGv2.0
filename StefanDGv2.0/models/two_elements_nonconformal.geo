@@ -44,10 +44,14 @@ Volume(1) = {1};
 //+
 Translate {1, 0, 0} {
   Duplicata { Volume{1}; }
-}//+
+}
+//+
 Rotate {{0, 1, 0}, {0, 0, 0}, Pi/2} {
   Volume{2}; 
 }
+//+
+//MeshSize{ PointsOf{ Volume{1}; } } = 1;
+//MeshSize{ PointsOf{ Volume{2}; } } = 1;
 //+
 Physical Surface("C", 13) = {2, 7};
 //+
@@ -58,5 +62,6 @@ Translate {0, 0, 1} {
   Volume{2}; 
 }
 //+
-Physical Volume("M:L; 1.5;1.7;1.3;", 15) = {1, 2};
+Physical Volume("M:L; 1.5;1.7;1.3;", 15) = {1};
+Physical Volume("M:S; 1.5;1.7;1.3;", 16) = {2};
 

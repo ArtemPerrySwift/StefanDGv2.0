@@ -55,24 +55,26 @@ namespace DG
 						      void* additionalBuffer,
 						      Solution* solutionIt);
 
-		void relocateInitialFrontNodes(MaterialPhase solidMaterialsPhase,
-									   MaterialPhase liquidMaterialsPhase,
-									   const double dt,
-									   const double latentHeat,
-									   const Coordinates* normalIt,
-									   const unsigned int nFrontNodes,
-									   Coordinates* frontNodesIt);
+		void computeFrontNodesInitialMovements(MaterialPhase solidMaterialsPhase,
+											   MaterialPhase liquidMaterialsPhase,
+											   const double dt,
+											   const double latentHeat,
+											   const Coordinates* normalIt,
+											   const unsigned int nFrontNodes,
+											   const Coordinates* frontNodesIt,
+											   Coordinates* movementIt);
 
-		void relocateFrontNodes(const Solution& solution,
-								int solidRegionTag,
-								int liquidRegionTag,
-								MaterialPhase solidMaterialsPhase,
-								MaterialPhase liquidMaterialsPhase,
-								const double dt,
-								const double latentHeat,
-								const Coordinates* normalIt,
-								const unsigned int nFrontNodes,
-								Coordinates* frontNodesIt);
+		void computeFrontNodesMovements(const Solution& solution,
+										int solidRegionTag,
+										int liquidRegionTag,
+										MaterialPhase solidMaterialsPhase,
+										MaterialPhase liquidMaterialsPhase,
+										const double dt,
+										const double latentHeat,
+										const Coordinates* normalIt,
+										const unsigned int nFrontNodes,
+										const Coordinates* frontNodesIt,
+										Coordinates* movements);
 
 		void getFrontNodes(const int frontTag, int** frontNodesTags,unsigned int* nFrontNodes);
 	}

@@ -51,12 +51,19 @@ Surface Loop(2) = {7, 8, 9, 11, 10, 2};
 //+
 Volume(2) = {2};
 //+
-Physical Surface("D:293.15", 21) = {1};
+div = 0.5;
 //+
-Physical Surface("D:271.15", 22) = {9};
+MeshSize{ PointsOf{ Volume{1}; } } = div;
+MeshSize{ PointsOf{ Volume{2}; } } = div;
 //+
-Physical Surface("S:273.15", 23) = {2};
+Physical Surface("D:0.0", 21) = {1};
 //+
-Physical Volume("M:L; 580;1000;4187;", 24) = {1};
+Physical Surface("D:2.0", 22) = {9};
 //+
-Physical Volume("M:S; 2230;900;2060;", 25) = {2};
+Physical Surface("S:1.0", 23) = {2};
+//+
+//Physical Surface("D", 23) = {1, 2, 9};
+//+
+Physical Volume("M:S; 580;1000;4187;", 24) = {1};
+//+
+Physical Volume("M:L; 580;1000;4187;", 25) = {2};

@@ -26,6 +26,13 @@ public:
 	unsigned int nBoundaries;
 	unsigned int nNonconformInterfaces;
 	
+	static void movePoints(const int* pointTagIt,
+						   const unsigned int nPoints,
+						   const Coordinates* pointIt,
+						   const Coordinates* movementIt,
+						   Coordinates* movedPointIt);
+
+	static void getFronts(int*& frontsPointsTags, Coordinates*& frontsPoints, unsigned int*& frontsPointsStartIndexes, unsigned int& nFronts);
 	Error initilizeByCurrentGMSHModel();
 	void clear();
 };

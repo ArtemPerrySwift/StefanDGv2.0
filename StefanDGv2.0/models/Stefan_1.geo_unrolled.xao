@@ -1035,7 +1035,7 @@ Co
     </topology>
   </geometry>
   <groups count="7">
-    <group name="S: 273.15" dimension="face" tag="87" count="1">
+    <group name="S:273.15" dimension="face" tag="87" count="1">
       <element index="15"/>
     </group>
     <group name="D:293.15" dimension="face" tag="88" count="1">

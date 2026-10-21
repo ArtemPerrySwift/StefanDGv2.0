@@ -9,7 +9,11 @@
 
 const char timeMeshFileName[] = "TimeMesh.txt";
 const char gmshInitialModelName[] = "Stefan";
-const char gmshInitialModelFileName[] = "./Models/Stefan.geo";
+//const char gmshInitialModelFileName[] = "./models/Stefan.geo";
+//const char gmshInitialModelFileName[] = "./models/Stefan_conform.xao";
+
+const char gmshBaseModelFileName[] = "./models/FrontPoints.geo";
+const char gmshMergeModelFileName[] = "./models/FrontPointsMerge.geo";
 
 enum Error {
 	OPENING_TIME_FILE = 1,
@@ -19,7 +23,7 @@ enum Error {
 	READING_MODEL
 };
 
-static uint8_t readTimeParameters(double* tMin, double* tMax, size_t* nTSteps)
+static uint8_t readTimeParameters(double* tMin, double* tMax, size_t* nTIntervals)
 {
 	FILE* timeFile = fopen(timeMeshFileName, "r");
 
@@ -29,7 +33,7 @@ static uint8_t readTimeParameters(double* tMin, double* tMax, size_t* nTSteps)
 		return Error::OPENING_TIME_FILE;
 	}
 
-	if (fscanf(timeFile, "%lf %lf %zu", tMin, tMax, nTSteps) != 3)
+	if (fscanf(timeFile, "%lf %lf %zu", tMin, tMax, nTIntervals) != 3)
 	{
 		printf("Error: unable to read time parameters in file %s\n", timeMeshFileName);
 		return Error::READING_TIME_PARAMETERS;
@@ -69,9 +73,14 @@ static uint8_t test()
 	}
 
 	gmsh::initialize();
-	const char gmshFilePath[] = "./models/two_elements_nonconformal.geo";
+	//const char gmshFilePath[] = "./models/two_elements_nonconformal.geo";
+	//const char gmshFilePath[] = "./models/Stefan_conform.geo";
+	//const char gmshFilePath[] = "./models/BoxGeo.geo";
+	const char gmshFilePath[] = "./models/StefanConfromOCC.geo";
+	//const char gmshFilePath[] = "./models/box_occ.geo";
 	//const char gmshFilePath[] = "./models/one_element_occ.geo";
 	const char gmshModelName[] = "Test";
+	//gmsh::open(gmshFilePath);
 	gmsh::model::add(gmshModelName);
 
 	gmsh::merge(gmshFilePath);
@@ -87,7 +96,22 @@ static uint8_t test()
 		gmsh::finalize();
 		return 1;
 	}
-
+	//gmsh::model::occ::synchronize();
+	//gmsh::model::geo::synchronize();
+	gmsh::vectorpair vectp = { {0, 7}, {0, 2}, {0, 6}, {0, 3} };
+	//gmsh::vectorpair vectp = { {2, 1}};
+	/*vectp.resize(nFrontNodes);
+	for (size_t j = 0; j < nFrontNodes; ++j)
+	{
+		vectp[j] = { 0, frontNodeTags[j] };
+	}*/
+	//int frontNodeTags[] = {7, 2, 6, 3};
+	//Coordinates frontNodes[] = { {1.1, 0, 1}, {1.1, 0, 0}, {1.1, 1, 1}, {1.1, 1, 0} };
+	//gmsh::model::setNodes(frontNodeTags, 4, (double(*)[3])frontNodes);
+	//gmsh::model::occ::translate(vectp, 0.1, 0.0, 0.0);
+	//gmsh::model::occ::synchronize();
+	//gmsh::model::mesh::generate();
+	
 	size_t* modelMemoryBuffer = (size_t*)malloc((3 * (model.nRegions + 1) + model.nBoundaries + 1) * sizeof(size_t) +
 		2 * model.nRegions * sizeof(double*) +
 		model.nNonconformInterfaces * sizeof(unsigned int*) +
@@ -138,17 +162,21 @@ static uint8_t test()
 	
 	solution2.clear();
 	//*/
-	solution.clear();
+	//solution.clear();
+
+
+	//gmsh::fltk::run();
+	gmsh::finalize();
 }
 
 int main()
 {
-	test();
-	return 0;
+	//test();
+	//return 0;
 	double tMin, tMax;
-	size_t nTSteps;
+	size_t nTIntervals;
 
-	uint8_t err = readTimeParameters(&tMin, &tMax, &nTSteps);
+	uint8_t err = readTimeParameters(&tMin, &tMax, &nTIntervals);
 	if (err)
 	{
 		return err;
@@ -171,16 +199,23 @@ int main()
 	gmsh::initialize();
 	//test();
 	//return 0;
-	gmsh::open(gmshInitialModelFileName);
+	gmsh::model::add(gmshInitialModelName);
+	gmsh::merge(gmshBaseModelFileName);
 
-	gmsh::model::mesh::generate();
+	int* frontsPointsTags;
+	Coordinates* baseFrontsPoints;
+	unsigned int* frontsPointsStartIndexes;
+	unsigned int nFronts;
+	Model::getFronts(frontsPointsTags, baseFrontsPoints, frontsPointsStartIndexes, nFronts);
 
-	DG::Solution solutions[2];
+	unsigned int nFrontsNodes = frontsPointsStartIndexes[nFronts];
+	
+	Coordinates* frontsBuffer = (Coordinates*)malloc(3 * nFrontsNodes * sizeof(Coordinates));
+	Coordinates* frontPoints = frontsBuffer;
+	Coordinates* frontPointsMovements = frontPoints + nFrontsNodes;
+	Coordinates* frontNormals = frontPointsMovements + nFrontsNodes;
 
-	DG::Solution* previousSolution = solutions;
-	DG::Solution* currentSolution = solutions + 1;
-
-	gmsh::model::mesh::generate();
+	gmsh::merge(gmshMergeModelFileName);
 
 	Model model;
 	if (model.initilizeByCurrentGMSHModel() != Model::Error::NO_ERRORS)
@@ -189,7 +224,7 @@ int main()
 		return 1;
 	}
 
-	const size_t nTIntervals = nTSteps - 1;
+	const size_t nTSteps = nTIntervals + 1;
 
 	if (nTIntervals == 0)
 	{
@@ -234,38 +269,40 @@ int main()
 												 model.nNonconformInterfaces * sizeof(double*));
 
 	double* calculationBuffer = (double*)malloc(1024 * sizeof(double));
-
+	gmsh::model::mesh::generate();
 	double* initialDOFs = DG::StefanTask::computeInitialDOFs(model.nRegions, model.regionsMaterialPhases, modelMemoryBuffer);
 	int viewTag = gmsh::view::add(gmshInitialModelName);
 	gmsh::view::addTetrahedronsNodesData(viewTag, 0, gmshInitialModelName, initialDOFs, tMin);
 	free(initialDOFs);
 
-	int* frontNodeTags;
-	unsigned int nFrontNodes;
-	DG::StefanTask::getFrontNodes(model.frontTag, &frontNodeTags, &nFrontNodes);
-	Coordinates* frontNodes = (Coordinates*)malloc(nFrontNodes * sizeof(Coordinates));
-	gmsh::model::getNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
-	Coordinates* frontNormals = (Coordinates*)malloc(nFrontNodes * sizeof(Coordinates));
-	gmsh::model::getNormals(model.frontTag, (double*)frontNodes, nFrontNodes, (double*)frontNormals);
-
-	DG::StefanTask::relocateInitialFrontNodes(*solidMaterialsPhase, *liquidMaterialsPhase,dt, latentHeat, frontNormals, nFrontNodes, frontNodes);
+	//int* frontNodeTags;
+	//unsigned int nFrontNodes;
+	//DG::StefanTask::getFrontNodes(model.frontTag, &frontNodeTags, &nFrontNodes);
+	//Coordinates* frontNodes = (Coordinates*)malloc(nFrontNodes * sizeof(Coordinates));
+	//gmsh::model::getNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
+	//Coordinates* frontNormals = (Coordinates*)malloc(nFrontNodes * sizeof(Coordinates));
 
 	char* gmshPreviousModelName = (char*)malloc(sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)) + 1);
 	char* gmshModelName = (char*)malloc(sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)) + 1);
-	char* gmshModelFileName = (char*)malloc(sizeof(gmshInitialModelFileName) + (int)floor(log10(nTIntervals)) + sizeof("_.geo_unrolled"));
+	//char* gmshModelFileName = (char*)malloc(sizeof(gmshInitialModelFileName) + (int)floor(log10(nTIntervals)) + sizeof("_.geo_unrolled.xao") + 1);
+	//char* gmshModelFileName = (char*)malloc(sizeof(gmshInitialModelFileName) + (int)floor(log10(nTIntervals)) + sizeof("_.xao") + 1);
 
 	strcpy(gmshPreviousModelName, gmshInitialModelName);
 	strcpy(gmshModelName, gmshInitialModelName);
-	strcpy(gmshModelFileName, gmshInitialModelFileName);
+	//strcpy(gmshModelFileName, gmshInitialModelFileName);
 
-	strcpy(gmshModelFileName + sizeof(gmshInitialModelFileName) - 5, "_1.geo_unrolled");
+	//strcpy(gmshModelFileName + sizeof(gmshInitialModelFileName) - 5, "_1.xao");
 	strcpy(gmshModelName + sizeof(gmshInitialModelName) - 1, "_1");
 
+	gmsh::model::getNormals(model.frontTag, (double*)baseFrontsPoints, nFrontsNodes, (double*)frontNormals);
+	DG::StefanTask::computeFrontNodesInitialMovements(*solidMaterialsPhase, *liquidMaterialsPhase, dt, latentHeat, frontNormals, nFrontsNodes, baseFrontsPoints, frontPointsMovements);
 
 	gmsh::model::add(gmshModelName);
-	gmsh::merge(gmshInitialModelFileName);
-	gmsh::model::setNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
-	gmsh::write(gmshModelFileName);
+	gmsh::merge(gmshBaseModelFileName);
+	Model::movePoints(frontsPointsTags, nFrontsNodes, baseFrontsPoints, frontPointsMovements, frontPoints);
+	gmsh::merge(gmshMergeModelFileName);
+	//gmsh::model::setNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
+	//gmsh::write(gmshModelFileName);
 
 	gmsh::model::mesh::generate();
 
@@ -277,6 +314,11 @@ int main()
 
 	//initialDOFs = DG::StefanTask::computeInitialDOFs(model.nRegions, model.regionsMaterialPhases, modelMemoryBuffer);
 	//free(initialDOFs);
+
+	DG::Solution solutions[2];
+
+	DG::Solution* previousSolution = solutions;
+	DG::Solution* currentSolution = solutions + 1;
 
 	DG::StefanTask::solveInitialIteration(model.nRegions,
 										  model.regionsMaterialPhases,
@@ -291,18 +333,21 @@ int main()
 										  modelMemoryBuffer,
 										  currentSolution);
 
-	viewTag = gmsh::view::add(gmshModelName);
+	//viewTag = gmsh::view::add(gmshModelName);
 	gmsh::view::addTetrahedronsNodesData(viewTag, 1, gmshModelName, currentSolution->getDOFs(), tMin + dt);
 
-	const uint8_t DEBUG_DOFS_SIZE = 4;
-
+	strcpy(gmshPreviousModelName + sizeof(gmshInitialModelName) - 1, "_0");
 	for (size_t i = 2; i < nTSteps; ++i)
 	{
+		std::swap(previousSolution, currentSolution);
+		currentSolution->clear();
+
 		std::swap(gmshModelName, gmshPreviousModelName);
 		double t = tMin + i * dt;
-		gmsh::model::getNormals(model.frontTag, (double*)frontNodes, nFrontNodes, (double*)frontNormals);
+		gmsh::model::getNormals(model.frontTag, (double*)baseFrontsPoints, nFrontsNodes, (double*)frontNormals);
+		//gmsh::model::getNormals(model.frontTag, (double*)frontNodes, nFrontNodes, (double*)frontNormals);
 
-		DG::StefanTask::relocateFrontNodes(*previousSolution,
+		DG::StefanTask::computeFrontNodesMovements(*previousSolution,
 										   solidRegionTag,
 										   liquidRegionTag,
 										   *solidMaterialsPhase,
@@ -310,17 +355,43 @@ int main()
 										   dt,
 										   latentHeat,
 										   frontNormals,
-										   nFrontNodes,
-										   frontNodes);
+										   nFrontsNodes,
+										   frontPoints,
+										   frontPointsMovements);
 
-		sprintf(gmshModelName + sizeof(gmshInitialModelName) + 1, "%zu", i);
+		sprintf(gmshModelName + sizeof(gmshInitialModelName), "%zu", i);
+		//gmsh::open(gmshModelFileName);
 		gmsh::model::add(gmshModelName);
 
-		gmsh::merge(gmshModelFileName);
+		gmsh::merge(gmshBaseModelFileName);
+		//gmsh::merge(gmshInitialModelFileName);
+		Model::movePoints(frontsPointsTags, nFrontsNodes, baseFrontsPoints, frontPointsMovements, frontPoints);
+		gmsh::merge(gmshMergeModelFileName);
 
-		gmsh::model::setNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
-		sprintf(gmshModelFileName + sizeof(gmshInitialModelFileName), "%zu.geo_unrolled", i);
-		gmsh::write(gmshModelFileName);
+		//gmsh::model::setNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
+		//gmsh::model::occ::synchronize();
+		//{
+		//	//gmsh::vectorpair vectpdim;
+		//	//gmsh::model::occ::getEntities(vectpdim, 0);
+		//	gmsh::vectorpair vectp = { {3, 1} };
+		//	/*vectp.resize(nFrontNodes);
+		//	for (size_t j = 0; j < nFrontNodes; ++j)
+		//	{
+		//		vectp[j] = { 0, frontNodeTags[j] };
+		//	}*/
+
+		//	gmsh::model::occ::translate(vectp, 0.1, 0.0, 0.0);
+		//	gmsh::model::occ::synchronize();
+		//}
+
+		//sprintf(gmshModelFileName + sizeof(gmshInitialModelFileName) - 4, "%zu.xao", i);
+		//gmsh::write(gmshModelFileName);
+
+		//gmsh::model::remove();
+		//gmsh::model::add(gmshModelName);
+
+		//gmsh::merge(gmshModelFileName);
+		//gmsh::open(gmshModelFileName);
 
 		gmsh::model::mesh::generate();
 
@@ -340,15 +411,32 @@ int main()
 									   modelMemoryBuffer,
 									   currentSolution);
 
-		viewTag = gmsh::view::add(gmshModelName);
+		/*DG::StefanTask::solveInitialIteration(model.nRegions,
+			model.regionsMaterialPhases,
+			model.boundaries,
+			model.nBoundaries,
+			model.nonconformInterfaces,
+			model.nNonconformInterfaces,
+			t,
+			dt,
+			penalty,
+			calculationBuffer,
+			modelMemoryBuffer,
+			currentSolution);*/
+
+		//viewTag = gmsh::view::add(gmshModelName);
 		gmsh::view::addTetrahedronsNodesData(viewTag, i, gmshModelName, currentSolution->getDOFs(), t);
 
 		previousSolution->clear();
 		std::swap(previousSolution, currentSolution);
 	}
 
-	free(gmshModelName);
-	free(gmshModelFileName);
+	free(frontsPointsTags);
+	free(baseFrontsPoints);
+	free(frontsPointsStartIndexes);
+	free(frontsBuffer);
+	//free(gmshModelName);
+	//free(gmshModelFileName);
 	free(modelMemoryBuffer);
 	free(calculationBuffer);
 

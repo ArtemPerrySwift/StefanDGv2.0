@@ -397,10 +397,12 @@ bool getMaterialPhases(const unsigned int* nameStartIndexIt,
 
 const unsigned char PLANE_SURFACE = 16;
 
-unsigned int bsearch(const int key, const int arr[], const unsigned int n)
+
+static unsigned int bsearch(const int key, const int arr[], const unsigned int n)
 {
+    unsigned int lastIndex = n - 1;
     unsigned int l = 0, r = n, i;
-    while (arr[l] != key)
+    while (arr[l] != key && r != 0 && l != lastIndex)
     {
         i = (l + r) >> 1;
         if (arr[i] > key)
@@ -413,7 +415,7 @@ unsigned int bsearch(const int key, const int arr[], const unsigned int n)
         }
     }
 
-    return l;
+    return arr[l] == key ? l : n;
 }
 
 bool initilizeBoundaries(const int orderedSurfacesPGsTags[],
@@ -623,6 +625,215 @@ unsigned int processBoundariesFinal(const int surfacesTags[],
     free(memoryBuffer);
 
     return iConformCondition;
+}
+
+static unsigned int getFrontsPGs(const unsigned int* nameStartIndexIt, const char* namesStart, const unsigned int nPGs, const int* PGsTags, int* frontPGTagIt)
+{
+    const char* name;
+    unsigned int nFronts = 0;
+    for (unsigned int i = 0; i < nPGs; ++i)
+    {
+        name = namesStart + *nameStartIndexIt;
+
+        if (*name == 'S')
+        {
+            ++nFronts;
+            *frontPGTagIt = PGsTags[i];
+            ++frontPGTagIt;
+            break;
+        }
+        ++nameStartIndexIt;
+    }
+
+    return nFronts;
+}
+
+static unsigned int getFrontsEntities(const int frontPGTags[],
+                                      const unsigned int nFrontPGs,
+                                      const int* entitiesPGsTagIt,
+                                      const unsigned int* entitiesPGsStartIndexesIt,
+                                      const unsigned int nEntities,
+                                      int* frontEntitiesIndexesSetIt,
+                                      int* entitiyFrontIndexIt,
+                                      unsigned int frontsEntitiesCounts[])
+{
+    unsigned int nFrontEntities = 0;
+    memset(frontsEntitiesCounts, 0, sizeof(unsigned int) * nFrontPGs);
+    for (unsigned int i = 0, j = *entitiesPGsStartIndexesIt; i < nEntities; ++i)
+    {
+        ++entitiesPGsStartIndexesIt;
+        unsigned int curvesPGsEndIndex = *entitiesPGsStartIndexesIt;
+        if (j != curvesPGsEndIndex)
+        {
+            bool frontPGNotFound = true;
+            for (; j < curvesPGsEndIndex && frontPGNotFound; ++j)
+            {
+                unsigned int PGIndex = bsearch(*entitiesPGsTagIt, frontPGTags, nFrontPGs);
+                if (PGIndex != nFrontPGs)
+                {
+                    frontPGNotFound = false;
+                    *frontEntitiesIndexesSetIt = i;
+                    *entitiyFrontIndexIt = PGIndex;
+                    ++frontsEntitiesCounts[PGIndex];
+
+                    ++nFrontEntities;
+                    ++frontEntitiesIndexesSetIt;
+                    ++entitiyFrontIndexIt;
+
+                }
+                else
+                {
+                    ++entitiesPGsTagIt;
+                }
+            }
+            entitiesPGsTagIt += curvesPGsEndIndex - j;
+            j = curvesPGsEndIndex;
+        }
+
+    }
+    return nFrontEntities;
+}
+
+static unsigned int computeStartIndexes(const unsigned int* countIt, const unsigned int nCounts, unsigned int* startIndexIt)
+{
+    *startIndexIt = 0;
+    for (unsigned int i = 1; i < nCounts; ++i)
+    {
+        *(startIndexIt + 1) = *startIndexIt + *countIt;
+        ++startIndexIt;
+        ++countIt;
+    }
+    return *startIndexIt + *countIt;
+}
+
+
+static void organizeFrontsEntities(const int* frontEntitiesIndexesSetIt,
+                                   const int* entitiesFrontIndexIt,
+                                   const unsigned int nFronts,
+                                   unsigned int* frontEntitiesCurrentIndexes,
+                                   unsigned int nFrontEntities,
+                                   unsigned int frontsEntitiesIndexes[])
+{
+    for (unsigned int i = 0; i < nFrontEntities; ++i)
+    {
+        unsigned int* frontEntitiesCurrentIndex = frontEntitiesCurrentIndexes + *entitiesFrontIndexIt;
+        frontsEntitiesIndexes[*frontEntitiesCurrentIndex] = *frontEntitiesIndexesSetIt;
+        ++(*frontEntitiesCurrentIndex);
+        ++entitiesFrontIndexIt;
+        ++frontEntitiesIndexesSetIt;
+    }
+}
+
+static void extractPoints(const unsigned int* pointIndexIt,
+                          const unsigned int nPoints,
+                          const int pointsTags[],
+                          double* pointsCoordinates,
+                          int* extractedPointTagIt,
+                          double* extractedPointCoordinatesIt)
+{
+    double (*points)[3] = (double (*)[3])pointsCoordinates;
+    for (unsigned int i = 0; i < nPoints; ++i)
+    {
+        *extractedPointTagIt = pointsTags[*pointIndexIt];
+        const double* pointCoordinates = points[*pointIndexIt];
+
+        *extractedPointCoordinatesIt = *pointCoordinates;
+        ++extractedPointCoordinatesIt;
+        ++pointCoordinates;
+        *extractedPointCoordinatesIt = *pointCoordinates;
+        ++extractedPointCoordinatesIt;
+        ++pointCoordinates;
+        *extractedPointCoordinatesIt = *pointCoordinates;
+        ++extractedPointCoordinatesIt;
+
+        ++extractedPointTagIt;
+        ++pointIndexIt;
+    }
+}
+
+void Model::movePoints(const int* pointTagIt,
+                       const unsigned int nPoints,
+                       const Coordinates* pointIt,
+                       const Coordinates* movementIt,
+                       Coordinates* movedPointIt)
+{
+    gmsh::vectorpair dimTagBuffer(1);
+    std::pair<int, int> *dimTag = dimTagBuffer.data();
+    dimTag->first = 0;
+    for (unsigned int i = 0; i < nPoints; ++i)
+    {
+        dimTag->second = *pointTagIt;
+        gmsh::model::occ::translate(dimTagBuffer, movementIt->x, movementIt->y, movementIt->z);
+
+        movedPointIt->x = pointIt->x + movementIt->x;
+        movedPointIt->y = pointIt->y + movementIt->y;
+        movedPointIt->z = pointIt->z + movementIt->z;
+
+        ++movedPointIt;
+        ++pointIt;
+        ++movementIt;
+        ++pointTagIt;
+    }
+}
+
+void Model::getFronts(int*& frontsPointsTags, Coordinates*& frontsPoints, unsigned int*& frontsPointsStartIndexes, unsigned int& nFronts)
+{
+    unsigned int dimensionsPGsStartIndexes[5];
+    int nPGs = gmsh::model::physical_groups::getCount();
+    void* PGsMemoryPull = malloc((2 * nPGs + 1) * sizeof(int));
+
+    int* PGsTags = (int*)PGsMemoryPull;
+    unsigned int* PGsNamesStartIndexes = (unsigned int*)(PGsTags + nPGs);
+    gmsh::model::physical_groups::getStartIndexes(dimensionsPGsStartIndexes, PGsNamesStartIndexes);
+
+    char* PGsNames = (char*)malloc(PGsNamesStartIndexes[nPGs] * sizeof(char));
+    gmsh::model::physical_groups::getPhysicalGroups(PGsTags, PGsNames);
+
+    unsigned int nPointsPGs = dimensionsPGsStartIndexes[1] - dimensionsPGsStartIndexes[0];
+    int* frontsPGsTags = (int*)malloc(nPointsPGs * sizeof(int));
+
+    nFronts = getFrontsPGs(PGsNamesStartIndexes + dimensionsPGsStartIndexes[0], PGsNames, nPointsPGs, PGsTags, frontsPGsTags);
+
+    free(PGsMemoryPull);
+    free(PGsNames);
+
+    unsigned int nPoints = gmsh::model::points::getCount();
+    unsigned int* pointsPGsSTartIndexes = (unsigned int*)malloc((nPoints + 1) * sizeof(unsigned int));
+    int* pointsTags = (int*)malloc(nPoints * sizeof(int));
+    double* pointsCoordinates = (double*)malloc(nPoints * sizeof(double) * 3);
+
+    gmsh::model::points::getStartIndexes(pointsPGsSTartIndexes);
+
+    int* pointsPGsTags = (int*)malloc(pointsPGsSTartIndexes[nPoints] * sizeof(unsigned int));
+    gmsh::model::points::getPoints(pointsTags, pointsCoordinates, pointsPGsTags);
+
+    void* buffer = malloc(nFronts * sizeof(unsigned int) + 2 * nPoints * sizeof(int));
+    unsigned int* frontsEntitiesCounts = (unsigned int*)buffer;
+    int* frontEntitiesIndexesSetIt = (int*)(frontsEntitiesCounts + nFronts);
+    int* entitiyFrontIndexIt = frontEntitiesIndexesSetIt + nPoints;
+
+    getFrontsEntities(frontsPGsTags, nFronts, pointsPGsTags, pointsPGsSTartIndexes, nPoints, frontEntitiesIndexesSetIt, entitiyFrontIndexIt, frontsEntitiesCounts);
+
+    free(pointsPGsSTartIndexes);
+
+    frontsPointsStartIndexes = (unsigned int*)malloc((nFronts + 1) * sizeof(unsigned int));
+    unsigned int nFrontEntities = computeStartIndexes(frontsEntitiesCounts, nFronts, frontsPointsStartIndexes + 1);
+
+    *frontsPointsStartIndexes = 0;
+    unsigned int* frontsEntitiesIndexes = (unsigned int*)malloc(nFrontEntities * sizeof(unsigned int));
+    organizeFrontsEntities(frontEntitiesIndexesSetIt, entitiyFrontIndexIt, nFronts, frontsPointsStartIndexes + 1, nFrontEntities, frontsEntitiesIndexes);
+
+    free(buffer);
+
+    frontsPointsTags = (int*)malloc(nFrontEntities * sizeof(int));
+    double *frontsPointsCoordinates = (double*)malloc(nFrontEntities * 3 * sizeof(double));
+
+    extractPoints(frontsEntitiesIndexes, nFrontEntities, pointsTags, pointsCoordinates, frontsPointsTags, frontsPointsCoordinates);
+
+    frontsPoints = (Coordinates*)frontsPointsCoordinates;
+    free(frontsEntitiesIndexes);
+    free(pointsCoordinates);
+    free(pointsTags);
 }
 
 Model::Error Model::initilizeByCurrentGMSHModel()

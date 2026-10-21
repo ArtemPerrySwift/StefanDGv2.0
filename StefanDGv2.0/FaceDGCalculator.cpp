@@ -292,7 +292,8 @@ namespace DG
 
 		for (uint8_t i = 0; i < constants::tetrahedron::N_FACES; ++i)
 		{
-			NumericalIntegrationMethod::integrateProduct(*faceValuesIt, *massVectorIt);
+			computeMassVector(*faceValuesIt, *massVectorIt);
+			//NumericalIntegrationMethod::integrateProduct(*faceValuesIt, *massVectorIt);
 
 			++faceValuesIt;
 			++massVectorIt;
