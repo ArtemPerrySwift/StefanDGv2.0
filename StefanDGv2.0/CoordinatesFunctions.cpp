@@ -470,6 +470,21 @@ namespace CoordinatesFunctions
         transpLocalJacobianMatrix[8] = (jacobianMatrix[0] * jacobianMatrix[4] - jacobianMatrix[1] * jacobianMatrix[3]) / determinant;
     }
 
+    void computeTranspLocalJacobianMatrixTemplate(const double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], double transpLocalJacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT])
+    {
+        transpLocalJacobianMatrix[0] = (jacobianMatrix[4] * jacobianMatrix[8] - jacobianMatrix[5] * jacobianMatrix[7]);
+        transpLocalJacobianMatrix[1] = (jacobianMatrix[5] * jacobianMatrix[6] - jacobianMatrix[3] * jacobianMatrix[8]);
+        transpLocalJacobianMatrix[2] = (jacobianMatrix[3] * jacobianMatrix[7] - jacobianMatrix[4] * jacobianMatrix[6]);
+
+        transpLocalJacobianMatrix[3] = (jacobianMatrix[2] * jacobianMatrix[7] - jacobianMatrix[1] * jacobianMatrix[8]);
+        transpLocalJacobianMatrix[4] = (jacobianMatrix[0] * jacobianMatrix[8] - jacobianMatrix[2] * jacobianMatrix[6]);
+        transpLocalJacobianMatrix[5] = (jacobianMatrix[1] * jacobianMatrix[6] - jacobianMatrix[0] * jacobianMatrix[7]);
+
+        transpLocalJacobianMatrix[6] = (jacobianMatrix[1] * jacobianMatrix[5] - jacobianMatrix[2] * jacobianMatrix[4]);
+        transpLocalJacobianMatrix[7] = (jacobianMatrix[2] * jacobianMatrix[3] - jacobianMatrix[0] * jacobianMatrix[5]);
+        transpLocalJacobianMatrix[8] = (jacobianMatrix[0] * jacobianMatrix[4] - jacobianMatrix[1] * jacobianMatrix[3]);
+    }
+
 
     void computeLocalJacobianMatrix(const double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], const double determinant, double* localJacobianMatrixElementIt)
     {

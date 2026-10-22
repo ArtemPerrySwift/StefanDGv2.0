@@ -60,7 +60,7 @@ namespace CoordinatesFunctions
 
 	double computeJacobianMatrix(const Coordinates nodes[], const size_t* tetrahedronNodeIndexIt, double jacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT]);
 	void computeTranspLocalJacobianMatrix(const double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], const double determinant, double transpLocalJacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT]);
-
+	void computeTranspLocalJacobianMatrixTemplate(const double jacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT], double transpLocalJacobianMatrix[Coordinates::COUNT * LocalCoordinates3D::COUNT]);
 	void computeLocalJacobianMatrix(const double transpJacobianMatrix[LocalCoordinates3D::COUNT * Coordinates::COUNT],
 		const double determinant,
 		double* localJacobianMatrixElementIt);

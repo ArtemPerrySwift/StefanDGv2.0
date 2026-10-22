@@ -37,6 +37,57 @@ namespace DG
 	using Basis = LinearLagrangeBasis;
     namespace StefanTask
     {
+        // Фаза 1: Лёд(твёрдая фаза)
+        const double K_S     = 2.23;       // Вт / (м * К) - теплопроводность льда
+        const double RHO_S   = 916.4;    // кг / м3 - плотность льда
+        const double C_S     = 2'046.0;      // Дж / (кг * К) - удельная теплоемкость льда
+        const double ALPHA_S = sqrt(K_S / (RHO_S * C_S)); // м / с ^ 0.5 - температуропроводность льда
+        const double DBL_ALPHA_S = 2 * ALPHA_S;
+
+        // Фаза 2: Вода(жидкая фаза)
+        const double K_L     = 0.584;      // Вт / (м * К) - теплопроводность воды
+        const double RHO_L   = 999.5;   // кг / м3 - плотность воды(для простоты Stefan eq берет плотность фазы фронта)
+        const double C_L     = 4'200.0;     // Дж / (кг * К) - удельная теплоемкость воды
+        const double ALPHA_L = sqrt(K_L / (RHO_L * C_L)); // м / с ^ 0.5
+        const double DBL_ALPHA_L = 2 * ALPHA_L;
+
+        // Скрытая теплота плавления и температуры
+        const double L       = 334'000.0;     // Дж / кг
+        const double T_0     = -2.0;       // град.C(температура на стенке)
+        const double T_M     = 0.0;        // град.C(температура плавления)
+        const double T_INF   = 20.0;      // град.C(температура воды вдали)
+        const double RHO     = RHO_S;      // плотность твердой фазы(выделяющей / поглощающей теплоту)
+        const double F_SPEED = 1.3832088e-4;
+        const double TIME_ADD = 1 / (4 * F_SPEED * F_SPEED);
+        
+        const double DIV_S = F_SPEED / ALPHA_S;
+        const double DIV_L = F_SPEED / ALPHA_L;
+
+        const double A_S =   (T_M - T_0) / erf(DIV_S);
+        const double A_L = (T_M - T_INF) / erfc(DIV_L);
+
+        const double DS = A_S / (ALPHA_S * sqrt(M_PI)) * exp(-(DIV_S * DIV_S));
+        const double DL = A_L / (ALPHA_L * sqrt(M_PI)) * exp(-(DIV_L * DIV_L));
+
+        template<MaterialPhase::State state>
+        inline static double analyticalSolution(const Coordinates& point, double t)
+        {
+            return 0;
+        }
+
+
+        template<>
+        inline static double analyticalSolution<MaterialPhase::SOLID>(const Coordinates& point, double t)
+        {
+            return T_0 + A_S * erf(point.x / (DBL_ALPHA_S * sqrt(TIME_ADD + t)));
+        }
+
+        template<>
+        inline static double analyticalSolution<MaterialPhase::LIQUID>(const Coordinates& point, double t)
+        {
+            return T_INF + A_L * erfc(point.x / (DBL_ALPHA_L * sqrt(TIME_ADD + t)));
+        }
+
         template<MaterialPhase::State>
         inline static double initialCondition(const Coordinates& point)
         {
@@ -46,16 +97,19 @@ namespace DG
         template<>
         inline static double initialCondition<MaterialPhase::SOLID>(const Coordinates& point)
         {
-            //return 273.15 - point.x * 2;
-            return point.x;
+            return T_0 + A_S * erf(DIV_S * point.x);
+            //return 271.15 + point.x * 2;
+            //return point.x;
             //return 0.0;
         }
 
         template<>
         inline static double initialCondition<MaterialPhase::LIQUID>(const Coordinates& point)
         {
-            //return 293.15 - (point.x + 1)*20;
-            return point.x;
+            return T_INF + A_L * erfc(DIV_L * point.x);
+            //return 293.15 - (2 - point.x)*20;
+            //return 273.15 + (point.x - 1) * 20;
+            //return point.x;
             //return 0.0;
         }
 
@@ -85,14 +139,14 @@ namespace DG
         inline static void initialConditionGradient<MaterialPhase::SOLID>(const Coordinates& point, Coordinates& gradient)
         {
             //gradient = { -2, 0, 0 };
-            gradient = { 1, 0, 0 };
+            gradient = { DS, 0, 0 };
         }
 
         template<>
         inline static void initialConditionGradient<MaterialPhase::LIQUID>(const Coordinates& point, Coordinates& gradient)
         {
             //gradient = { -20, 0, 0 };
-            gradient = { 1, 0, 0 };
+            gradient = { DL, 0, 0 };
         }
 
 #if POWER_FUNCTION
@@ -118,11 +172,14 @@ namespace DG
         }
 #endif
 
+        /*
         inline static double analyticalSolution(const Coordinates& point, double t)
         {
             return (point.x);
         }
+        */
 
+        template<MaterialPhase::State state>
         static double computeErrors(const LocalCoordinates3D* localPointIt,
                                     const double jacobian[LocalCoordinates3D::COUNT * Coordinates::COUNT],
                                     const Coordinates tetrahedronStartPoint,
@@ -134,7 +191,7 @@ namespace DG
             for (uint8_t i = 0; i < NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps; ++i)
             {
                 CoordinatesFunctions::translate(*localPointIt, tetrahedronStartPoint, jacobian, point);
-                *errorIt = abs(analyticalSolution(point, t) - LinearLagrangeBasis::compute(*localPointIt, tetrahedronDOFs));
+                *errorIt = abs(analyticalSolution<state>(point, t) - LinearLagrangeBasis::compute(*localPointIt, tetrahedronDOFs));
                 ++errorIt;
                 ++localPointIt;
             }
@@ -142,7 +199,9 @@ namespace DG
         }
 
         static double computeEnergyError(const double (*DOFs)[Basis::N_FUNCTIONS],
-                                         const size_t nTetrahedrons,
+                                         const unsigned int nRegions,
+                                         const MaterialPhase* const* regionMaterialPhaseIt,
+                                         const size_t* regionStartTetrahedronIndexIt,
                                          Coordinates nodes[],
                                          const size_t(*tetrahedronNodesIndexesIt)[constants::tetrahedron::N_NODES],
                                          double t)
@@ -151,16 +210,42 @@ namespace DG
             double errors[NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps];
             double detSum = 0.0;
             double error = 0.0;
-            for (size_t i = 0; i < nTetrahedrons; ++i)
-            {
-                double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
-                computeErrors(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, jacobianMatrix, nodes[**tetrahedronNodesIndexesIt], *DOFs, t, errors);
-                error += NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
-                detSum += det;
 
-                ++tetrahedronNodesIndexesIt;
-                ++DOFs;
+            size_t j = *regionStartTetrahedronIndexIt;
+            for (unsigned int i = 0; i < nRegions; ++i)
+            {
+                ++regionStartTetrahedronIndexIt;
+                size_t iRegionTetrahedronsEnd = *regionStartTetrahedronIndexIt;
+
+                if ((*regionMaterialPhaseIt)->state == MaterialPhase::SOLID)
+                {
+                    for (; j < iRegionTetrahedronsEnd; ++j)
+                    {
+                        double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
+                        computeErrors<MaterialPhase::SOLID>(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, jacobianMatrix, nodes[**tetrahedronNodesIndexesIt], *DOFs, t, errors);
+                        error += NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
+                        detSum += det;
+
+                        ++tetrahedronNodesIndexesIt;
+                        ++DOFs;
+                    }
+                }
+                else
+                {
+                    for (; j < iRegionTetrahedronsEnd; ++j)
+                    {
+                        double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
+                        computeErrors<MaterialPhase::LIQUID>(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, jacobianMatrix, nodes[**tetrahedronNodesIndexesIt], *DOFs, t, errors);
+                        error += NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
+                        detSum += det;
+
+                        ++tetrahedronNodesIndexesIt;
+                        ++DOFs;
+                    }
+                }
+
             }
+
 
             return error / detSum * 6.0;
         }
@@ -3010,10 +3095,12 @@ enum IterationType {INITIAL, GENERAL};
             //std::cout << solutionIt->_DOFs << std::endl;
 
             double err = computeEnergyError((double(*)[Basis::N_FUNCTIONS])(solutionIt->_DOFs.data()),
-                nTetrahedrons,
-                nodes,
-                (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
-                t);
+                                            nRegions,
+                                            regionsMaterialPhases,
+                                            regionsStartTetrahedronsIndexes,
+                                            nodes,
+                                            (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
+                                            t);
 
             printf("Energy error: %lf\n", err);
 
@@ -3129,7 +3216,7 @@ enum IterationType {INITIAL, GENERAL};
                            fIt,
                            regionsLinearAdjusments);
 
-            gmsh::model::setCurrent(currentSolutionModelName);
+            //gmsh::model::setCurrent(currentSolutionModelName);
 
             //std::cout << "Power vector" << std::endl;
             //std::cout << f << std::endl;
@@ -3171,20 +3258,20 @@ enum IterationType {INITIAL, GENERAL};
             Eigen::Triplet<double, Eigen::Index>* triplets = (Eigen::Triplet<double, Eigen::Index>*)malloc(nBilinearAdjusments * sizeof(Eigen::Triplet<double, Eigen::Index>));
 
             buildSLAE(nRegions,
-                bilinearAdjusments,
-                crossBilinearAdjusments,
-                regionStartTetrahedronIndexIt,
-                regionsInteriorFacesStartIndexes,
-                surfacesFacesStartIndexes,
-                tetBaseFacesIndexes,
-                tetNeigbourFacesIndexes,
-                nonconformInterfaces,
-                nNonconformInterfaces,
-                interfacesFragmentsTrianglesIndexes,
-                interfacFragmentsCount,
-                nonconformCrossAdjusments,
-                regionsDOFsStartIndexes,
-                triplets);
+                      bilinearAdjusments,
+                      crossBilinearAdjusments,
+                      regionStartTetrahedronIndexIt,
+                      regionsInteriorFacesStartIndexes,
+                      surfacesFacesStartIndexes,
+                      tetBaseFacesIndexes,
+                      tetNeigbourFacesIndexes,
+                      nonconformInterfaces,
+                      nNonconformInterfaces,
+                      interfacesFragmentsTrianglesIndexes,
+                      interfacFragmentsCount,
+                      nonconformCrossAdjusments,
+                      regionsDOFsStartIndexes,
+                      triplets);
 
             Eigen::SparseMatrix<double, 0, Eigen::Index> A(nDOFs, nDOFs);
             A.setFromTriplets(triplets, triplets + nBilinearAdjusments);
@@ -3210,7 +3297,7 @@ enum IterationType {INITIAL, GENERAL};
             //double tol = solver.tolerance();
             solver.compute(A);
             solutionIt->_DOFs = solver.solveWithGuess(f, initial);
-            solutionIt->_DOFsPtr = solutionIt->_DOFs.data() - findFirstStartTetrahedronTag(regionsStartTetrahedronsTags);
+            solutionIt->_DOFsPtr = solutionIt->_DOFs.data() - findFirstStartTetrahedronTag(regionsStartTetrahedronsTags) * Basis::N_FUNCTIONS;
 
             printf("Solving slae finished\n");
             printf("Estimated error %e; Iterations count %zu\n", solver.error(), solver.iterations());
@@ -3224,10 +3311,12 @@ enum IterationType {INITIAL, GENERAL};
             //std::cout << solutionIt->_DOFs << std::endl;
 
             double err = computeEnergyError((double(*)[Basis::N_FUNCTIONS])(solutionIt->_DOFs.data()),
-                nTetrahedrons,
-                nodes,
-                (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
-                t);
+                                            nRegions,
+                                            regionsMaterialPhases,
+                                            regionsStartTetrahedronsIndexes,
+                                            nodes,
+                                            (size_t(*)[constants::tetrahedron::N_NODES])tetNodesTag,
+                                            t);
 
             printf("Energy error: %lf\n", err);
 
@@ -3291,7 +3380,6 @@ enum IterationType {INITIAL, GENERAL};
                 double flowSolidSide = gradientSolidSide.x * normalIt->x + gradientSolidSide.y * normalIt->y + gradientSolidSide.z * normalIt->z;
                 double flowLiquidSide = -(gradientLiquidSide.x * normalIt->x + gradientLiquidSide.y * normalIt->y + gradientLiquidSide.z * normalIt->z);
                 double moveCoeff = commonMultiplier * (solidMaterialsPhase.thermalConductivity * flowSolidSide + liquidMaterialsPhase.thermalConductivity * flowLiquidSide);
-
                 movementIt->x = moveCoeff * normalIt->x;
                 movementIt->y = moveCoeff * normalIt->y;
                 movementIt->z = moveCoeff * normalIt->z;
@@ -3397,9 +3485,13 @@ enum IterationType {INITIAL, GENERAL};
                     solution.compute(elementsTags[j], tetrahedronMainLocalPoints[iLocalNode], localGradient);
 
                     double det = CoordinatesFunctions::computeJacobianMatrix(tetrahedronNodes, jacobianMatrix);
-                    CoordinatesFunctions::computeTranspLocalJacobianMatrix(jacobianMatrix, det, transpLocalJacobianMatrix);
+                    //CoordinatesFunctions::computeTranspLocalJacobianMatrix(jacobianMatrix, det, transpLocalJacobianMatrix);
+                    CoordinatesFunctions::computeTranspLocalJacobianMatrixTemplate(jacobianMatrix, transpLocalJacobianMatrix);
 
                     CoordinatesFunctions::translate(transpLocalJacobianMatrix, localGradient, gradient);
+                    gradient.x /= det;
+                    gradient.y /= det;
+                    gradient.z /= det;
 
                     if (entityTag == solidRegionTag)
                     {
@@ -3422,7 +3514,7 @@ enum IterationType {INITIAL, GENERAL};
                 double flowSolidSide = (gradientSolidSideSum.x * normalIt->x + gradientSolidSideSum.y * normalIt->y + gradientSolidSideSum.z * normalIt->z) / nElementSolidSide;
                 double flowLiquidSide = -(gradientLiquidSideSum.x * normalIt->x + gradientLiquidSideSum.y * normalIt->y + gradientLiquidSideSum.z * normalIt->z) / nElementLiquidSide;
                 
-                double moveCoeff = commonMultiplier * (liquidMaterialsPhase.thermalConductivity * flowSolidSide + solidMaterialsPhase.thermalConductivity * flowLiquidSide);
+                double moveCoeff = commonMultiplier * (solidMaterialsPhase.thermalConductivity * flowSolidSide + liquidMaterialsPhase.thermalConductivity * flowLiquidSide);
 
                 //moveCoeff = 0.1;
                 movements->x += moveCoeff * normalIt->x;

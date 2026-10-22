@@ -18,6 +18,7 @@ const char gmshMergeModelFileName[] = "./models/FrontPointsMerge.geo";
 enum Error {
 	OPENING_TIME_FILE = 1,
 	READING_TIME_PARAMETERS,
+	ZERO_TIME_INTERVALS_COUNT,
 	OPENING_PARAMETER_FILE,
 	READING_PARAMETER,
 	READING_MODEL
@@ -36,10 +37,15 @@ static uint8_t readTimeParameters(double* tMin, double* tMax, size_t* nTInterval
 	if (fscanf(timeFile, "%lf %lf %zu", tMin, tMax, nTIntervals) != 3)
 	{
 		printf("Error: unable to read time parameters in file %s\n", timeMeshFileName);
+		fclose(timeFile);
 		return Error::READING_TIME_PARAMETERS;
 	}
 
-	fclose(timeFile);
+	if (*nTIntervals == 0)
+	{
+		return ZERO_TIME_INTERVALS_COUNT;
+	}
+
 	return 0;
 }
 
@@ -197,8 +203,6 @@ int main()
 	}
 
 	gmsh::initialize();
-	//test();
-	//return 0;
 	gmsh::model::add(gmshInitialModelName);
 	gmsh::merge(gmshBaseModelFileName);
 
@@ -225,12 +229,6 @@ int main()
 	}
 
 	const size_t nTSteps = nTIntervals + 1;
-
-	if (nTIntervals == 0)
-	{
-		return 0;
-	}
-
 	double dt = (tMax - tMin) / nTIntervals;
 
 	const Boundary* frontBoundary = model.boundaries;
@@ -275,23 +273,13 @@ int main()
 	gmsh::view::addTetrahedronsNodesData(viewTag, 0, gmshInitialModelName, initialDOFs, tMin);
 	free(initialDOFs);
 
-	//int* frontNodeTags;
-	//unsigned int nFrontNodes;
-	//DG::StefanTask::getFrontNodes(model.frontTag, &frontNodeTags, &nFrontNodes);
-	//Coordinates* frontNodes = (Coordinates*)malloc(nFrontNodes * sizeof(Coordinates));
-	//gmsh::model::getNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
-	//Coordinates* frontNormals = (Coordinates*)malloc(nFrontNodes * sizeof(Coordinates));
-
-	char* gmshPreviousModelName = (char*)malloc(sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)) + 1);
-	char* gmshModelName = (char*)malloc(sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)) + 1);
-	//char* gmshModelFileName = (char*)malloc(sizeof(gmshInitialModelFileName) + (int)floor(log10(nTIntervals)) + sizeof("_.geo_unrolled.xao") + 1);
-	//char* gmshModelFileName = (char*)malloc(sizeof(gmshInitialModelFileName) + (int)floor(log10(nTIntervals)) + sizeof("_.xao") + 1);
+	char* modelNamesBuffer = (char*)malloc(2 * (sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)) + 2));
+	char* gmshPreviousModelName = modelNamesBuffer;
+	char* gmshModelName = gmshPreviousModelName + sizeof(gmshInitialModelName) + (int)floor(log10(nTIntervals)) + 2;
 
 	strcpy(gmshPreviousModelName, gmshInitialModelName);
 	strcpy(gmshModelName, gmshInitialModelName);
-	//strcpy(gmshModelFileName, gmshInitialModelFileName);
 
-	//strcpy(gmshModelFileName + sizeof(gmshInitialModelFileName) - 5, "_1.xao");
 	strcpy(gmshModelName + sizeof(gmshInitialModelName) - 1, "_1");
 
 	gmsh::model::getNormals(model.frontTag, (double*)baseFrontsPoints, nFrontsNodes, (double*)frontNormals);
@@ -301,19 +289,11 @@ int main()
 	gmsh::merge(gmshBaseModelFileName);
 	Model::movePoints(frontsPointsTags, nFrontsNodes, baseFrontsPoints, frontPointsMovements, frontPoints);
 	gmsh::merge(gmshMergeModelFileName);
-	//gmsh::model::setNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
-	//gmsh::write(gmshModelFileName);
+
 
 	gmsh::model::mesh::generate();
 
-	//gmsh::fltk::run();
-	//gmsh::finalize();
-	//return 0;
-
 	DG::StefanTask::initSolver();
-
-	//initialDOFs = DG::StefanTask::computeInitialDOFs(model.nRegions, model.regionsMaterialPhases, modelMemoryBuffer);
-	//free(initialDOFs);
 
 	DG::Solution solutions[2];
 
@@ -332,20 +312,16 @@ int main()
 										  calculationBuffer,
 										  modelMemoryBuffer,
 										  currentSolution);
-
-	//viewTag = gmsh::view::add(gmshModelName);
 	gmsh::view::addTetrahedronsNodesData(viewTag, 1, gmshModelName, currentSolution->getDOFs(), tMin + dt);
 
 	strcpy(gmshPreviousModelName + sizeof(gmshInitialModelName) - 1, "_0");
 	for (size_t i = 2; i < nTSteps; ++i)
 	{
 		std::swap(previousSolution, currentSolution);
-		currentSolution->clear();
 
 		std::swap(gmshModelName, gmshPreviousModelName);
 		double t = tMin + i * dt;
 		gmsh::model::getNormals(model.frontTag, (double*)baseFrontsPoints, nFrontsNodes, (double*)frontNormals);
-		//gmsh::model::getNormals(model.frontTag, (double*)frontNodes, nFrontNodes, (double*)frontNormals);
 
 		DG::StefanTask::computeFrontNodesMovements(*previousSolution,
 										   solidRegionTag,
@@ -360,38 +336,12 @@ int main()
 										   frontPointsMovements);
 
 		sprintf(gmshModelName + sizeof(gmshInitialModelName), "%zu", i);
-		//gmsh::open(gmshModelFileName);
 		gmsh::model::add(gmshModelName);
 
 		gmsh::merge(gmshBaseModelFileName);
-		//gmsh::merge(gmshInitialModelFileName);
 		Model::movePoints(frontsPointsTags, nFrontsNodes, baseFrontsPoints, frontPointsMovements, frontPoints);
 		gmsh::merge(gmshMergeModelFileName);
 
-		//gmsh::model::setNodes(frontNodeTags, nFrontNodes, (double(*)[3])frontNodes);
-		//gmsh::model::occ::synchronize();
-		//{
-		//	//gmsh::vectorpair vectpdim;
-		//	//gmsh::model::occ::getEntities(vectpdim, 0);
-		//	gmsh::vectorpair vectp = { {3, 1} };
-		//	/*vectp.resize(nFrontNodes);
-		//	for (size_t j = 0; j < nFrontNodes; ++j)
-		//	{
-		//		vectp[j] = { 0, frontNodeTags[j] };
-		//	}*/
-
-		//	gmsh::model::occ::translate(vectp, 0.1, 0.0, 0.0);
-		//	gmsh::model::occ::synchronize();
-		//}
-
-		//sprintf(gmshModelFileName + sizeof(gmshInitialModelFileName) - 4, "%zu.xao", i);
-		//gmsh::write(gmshModelFileName);
-
-		//gmsh::model::remove();
-		//gmsh::model::add(gmshModelName);
-
-		//gmsh::merge(gmshModelFileName);
-		//gmsh::open(gmshModelFileName);
 
 		gmsh::model::mesh::generate();
 
@@ -411,32 +361,17 @@ int main()
 									   modelMemoryBuffer,
 									   currentSolution);
 
-		/*DG::StefanTask::solveInitialIteration(model.nRegions,
-			model.regionsMaterialPhases,
-			model.boundaries,
-			model.nBoundaries,
-			model.nonconformInterfaces,
-			model.nNonconformInterfaces,
-			t,
-			dt,
-			penalty,
-			calculationBuffer,
-			modelMemoryBuffer,
-			currentSolution);*/
-
-		//viewTag = gmsh::view::add(gmshModelName);
 		gmsh::view::addTetrahedronsNodesData(viewTag, i, gmshModelName, currentSolution->getDOFs(), t);
 
 		previousSolution->clear();
-		std::swap(previousSolution, currentSolution);
 	}
 
+	currentSolution->clear();
 	free(frontsPointsTags);
 	free(baseFrontsPoints);
 	free(frontsPointsStartIndexes);
 	free(frontsBuffer);
-	//free(gmshModelName);
-	//free(gmshModelFileName);
+	free(modelNamesBuffer);
 	free(modelMemoryBuffer);
 	free(calculationBuffer);
 
