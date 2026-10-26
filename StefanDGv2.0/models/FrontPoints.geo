@@ -5,7 +5,7 @@ GenMeshSize = 0.5;
 //+
 FrontMeshSize = 0.1;
 //+
-InfBorderRep = 7.0;
+InfBorderRep = 10.0;
 //+
 Point(1) = {0, 0, 0, GenMeshSize };
 //+

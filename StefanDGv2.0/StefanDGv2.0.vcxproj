@@ -136,12 +136,15 @@
     <ClCompile Include="Boundary.cpp" />
     <ClCompile Include="CoordinatesFunctions.cpp" />
     <ClCompile Include="DG.cpp" />
+    <ClCompile Include="DirichletCalculator.cpp" />
     <ClCompile Include="ElementLAC.cpp" />
     <ClCompile Include="FaceDGCalculator.cpp" />
     <ClCompile Include="LinearLagrangeBasis.cpp" />
     <ClCompile Include="LLt.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Model.cpp" />
+    <ClCompile Include="NewmanCalculator.cpp" />
+    <ClCompile Include="NodesFunctions.cpp" />
     <ClCompile Include="NumericalIntegration.cpp" />
     <ClCompile Include="TimeMesh.cpp" />
   </ItemGroup>
@@ -161,6 +164,7 @@
     <ClInclude Include="LocalCoordinates3D.h" />
     <ClInclude Include="MaterialPhase.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="NodesFunctions.h" />
     <ClInclude Include="NonconformInterface.h" />
     <ClInclude Include="NumericalIntegration.h" />
     <ClInclude Include="Region.h" />

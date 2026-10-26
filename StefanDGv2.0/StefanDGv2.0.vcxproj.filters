@@ -51,6 +51,15 @@
     <ClCompile Include="FaceDGCalculator.cpp">
       <Filter>DG</Filter>
     </ClCompile>
+    <ClCompile Include="DirichletCalculator.cpp">
+      <Filter>DG</Filter>
+    </ClCompile>
+    <ClCompile Include="NodesFunctions.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="NewmanCalculator.cpp">
+      <Filter>DG</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="LocalCoordinates2D.h">
@@ -111,6 +120,9 @@
       <Filter>DG</Filter>
     </ClInclude>
     <ClInclude Include="ArrayFunctions.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="NodesFunctions.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>

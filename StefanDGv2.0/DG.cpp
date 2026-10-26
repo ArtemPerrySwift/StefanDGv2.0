@@ -57,7 +57,7 @@ namespace DG
         const double T_M     = 0.0;        // град.C(температура плавления)
         const double T_INF   = 20.0;      // град.C(температура воды вдали)
         const double RHO     = RHO_S;      // плотность твердой фазы(выделяющей / поглощающей теплоту)
-        const double F_SPEED = 1.3832088e-4;
+        const double F_SPEED = 5.7750988819576507e-05;
         const double TIME_ADD = 1 / (4 * F_SPEED * F_SPEED);
         
         const double DIV_S = F_SPEED / ALPHA_S;
@@ -66,8 +66,8 @@ namespace DG
         const double A_S =   (T_M - T_0) / erf(DIV_S);
         const double A_L = (T_M - T_INF) / erfc(DIV_L);
 
-        const double DS = A_S / (ALPHA_S * sqrt(M_PI)) * exp(-(DIV_S * DIV_S));
-        const double DL = A_L / (ALPHA_L * sqrt(M_PI)) * exp(-(DIV_L * DIV_L));
+        const double DS = A_S / (ALPHA_S * sqrt(M_PI)) * exp(-(DIV_S * DIV_S)) * 2.0 * F_SPEED;
+        const double DL = -A_L / (ALPHA_L * sqrt(M_PI)) * exp(-(DIV_L * DIV_L)) * 2.0 * F_SPEED;
 
         template<MaterialPhase::State state>
         inline static double analyticalSolution(const Coordinates& point, double t)
@@ -188,10 +188,13 @@ namespace DG
                                     double* errorIt)
         {
             Coordinates point;
+            double err, analSolution;
             for (uint8_t i = 0; i < NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::nSteps; ++i)
             {
                 CoordinatesFunctions::translate(*localPointIt, tetrahedronStartPoint, jacobian, point);
-                *errorIt = abs(analyticalSolution<state>(point, t) - LinearLagrangeBasis::compute(*localPointIt, tetrahedronDOFs));
+                analSolution = analyticalSolution<state>(point, t);
+                err = (analSolution - LinearLagrangeBasis::compute(*localPointIt, tetrahedronDOFs)) / analSolution;
+                *errorIt = err * err;
                 ++errorIt;
                 ++localPointIt;
             }
@@ -223,7 +226,7 @@ namespace DG
                     {
                         double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
                         computeErrors<MaterialPhase::SOLID>(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, jacobianMatrix, nodes[**tetrahedronNodesIndexesIt], *DOFs, t, errors);
-                        error += NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
+                        error += det * NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
                         detSum += det;
 
                         ++tetrahedronNodesIndexesIt;
@@ -236,18 +239,18 @@ namespace DG
                     {
                         double det = CoordinatesFunctions::computeJacobianMatrix(nodes, *tetrahedronNodesIndexesIt, jacobianMatrix);
                         computeErrors<MaterialPhase::LIQUID>(NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::localPoints, jacobianMatrix, nodes[**tetrahedronNodesIndexesIt], *DOFs, t, errors);
-                        error += NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
+                        error += det * NumericalIntegration::Tetrahedron::Gauss<Basis::ORDER + 1>::integrate(errors);
                         detSum += det;
 
                         ++tetrahedronNodesIndexesIt;
                         ++DOFs;
                     }
                 }
-
+                ++regionMaterialPhaseIt;
             }
 
 
-            return error / detSum * 6.0;
+            return sqrt(error) / detSum * 6.0;
         }
 
         template<Boundary::FunctionCondition::Type conditionType>
@@ -3377,7 +3380,7 @@ enum IterationType {INITIAL, GENERAL};
             {
                 initialConditionGradient<MaterialPhase::SOLID>(*frontNodesIt, gradientSolidSide);
                 initialConditionGradient<MaterialPhase::LIQUID>(*frontNodesIt, gradientLiquidSide);
-                double flowSolidSide = gradientSolidSide.x * normalIt->x + gradientSolidSide.y * normalIt->y + gradientSolidSide.z * normalIt->z;
+                double flowSolidSide = (gradientSolidSide.x * normalIt->x + gradientSolidSide.y * normalIt->y + gradientSolidSide.z * normalIt->z);
                 double flowLiquidSide = -(gradientLiquidSide.x * normalIt->x + gradientLiquidSide.y * normalIt->y + gradientLiquidSide.z * normalIt->z);
                 double moveCoeff = commonMultiplier * (solidMaterialsPhase.thermalConductivity * flowSolidSide + liquidMaterialsPhase.thermalConductivity * flowLiquidSide);
                 movementIt->x = moveCoeff * normalIt->x;

@@ -1,5 +1,6 @@
 #pragma once
 #include "Coordinates.h"
+#include "LocalCoordinates2D.h"
 #include "LocalCoordinates3D.h"
 #include "GeometryConstants.h"
 
@@ -45,25 +46,47 @@ struct Boundary
 		enum class Type : uint8_t { DIRICHLET = MacroType::DIRICHLET_F, NEWMAN = MacroType::NEWMAN_F};
 		FunctionCondition(Type type);
 
-		static void computeDirichletValues(const Coordinates points[], uint8_t nPoints, double values[])
+		template<Type conditionType>
+		inline static double compute(const Coordinates& point)
 		{
-			for (uint8_t i = 0; i < nPoints; ++i)
-			{
-				*values = 0.0;
-
-				++points;
-				++values;
-			}
+			return 0.0;
 		}
 
-		static void computeNewmanValues(const Coordinates points[], uint8_t nPoints, double values[])
+		template<>
+		inline static double compute<Type::DIRICHLET>(const Coordinates& point)
 		{
-			for (uint8_t i = 0; i < nPoints; ++i)
-			{
-				*values = 0.0;
+			//return 0.0;
+			return point.x;
+			//return (point.x) * T;
+		}
 
-				++points;
-				++values;
+		template<>
+		inline static double compute<Type::NEWMAN>(const Coordinates& point)
+		{
+			return 0.0;
+		}
+
+		template<Type conditionType, const uint8_t N_POINTS>
+		static void compute(const LocalCoordinates2D* localPointIt,
+						    const double transpJacobian[LocalCoordinates2D::COUNT * Coordinates::COUNT],
+						    const Coordinates triangleStartPoint,
+						    double* conditionValueIt)
+		{
+			Coordinates point;
+			for (uint8_t i = 0; i < N_POINTS; ++i)
+			{
+				point = triangleStartPoint;
+				point.x += transpJacobian[0] * localPointIt->u;
+				point.y += transpJacobian[1] * localPointIt->u;
+				point.z += transpJacobian[2] * localPointIt->u;
+
+				point.x += transpJacobian[3] * localPointIt->v;
+				point.y += transpJacobian[4] * localPointIt->v;
+				point.z += transpJacobian[5] * localPointIt->v;
+
+				*conditionValueIt = compute<conditionType>(point);
+				++conditionValueIt;
+				++localPointIt;
 			}
 		}
 	};
